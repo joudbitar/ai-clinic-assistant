@@ -89,9 +89,9 @@ TWILIO_AUTH_TOKEN=...
 
 ## 📄 Documentation files
 
-| File                  | Purpose                        |
-|------------------------|-------------------------------|
-| `docs/MVP_SCOPE.md`    | What we’re building & why     |
+| File                   | Purpose                      |
+| ---------------------- | ---------------------------- |
+| `docs/MVP_SCOPE.md`    | What we’re building & why    |
 | `docs/ARCHITECTURE.md` | How the system is structured |
 | `docs/ONBOARDING.md`   | This guide                   |
 
