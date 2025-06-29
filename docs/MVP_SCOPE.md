@@ -23,7 +23,3 @@ Build a private, AI-powered clinical assistant for Dr. Nizar Bitar that:
 - Initially: Dr. Nizar Bitar
 - Later: possible use by secretary for scheduling.
 
-## 🌍 Future Goals
-
-- Add patient portal.
-- Roll out to more doctors in Lebanon & MENA.
