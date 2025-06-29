@@ -2,7 +2,7 @@
 
 ## 🎯 Goal
 
-Build a private, AI-powered clinical assistant for Dr. [Dad's Name] that:
+Build a private, AI-powered clinical assistant for Dr. Nizar Bitar that:
 
 - Organizes all patient records in one place.
 - Auto-transcribes and summarizes consultations.
