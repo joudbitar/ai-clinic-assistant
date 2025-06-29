@@ -3,6 +3,7 @@
 ## 🎯 Goal
 
 Build a private, AI-powered clinical assistant for Dr. Nizar Bitar that:
+Build a private, AI-powered clinical assistant for Dr. Nizar Bitar that:
 
 - Organizes all patient records in one place.
 - Auto-transcribes and summarizes consultations.
@@ -20,5 +21,6 @@ Build a private, AI-powered clinical assistant for Dr. Nizar Bitar that:
 
 ## 🚀 Users
 
+- Initially: Dr. Nizar Bitar
 - Initially: Dr. Nizar Bitar
 - Later: possible use by secretary for scheduling.
