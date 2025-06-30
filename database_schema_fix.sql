@@ -14,11 +14,10 @@ CREATE TABLE patients (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create recordings table with correct UUID schema
+-- Create recordings table with correct UUID schema (no URL storage)
 CREATE TABLE recordings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     filename TEXT NOT NULL,
-    url TEXT NOT NULL,
     transcript TEXT DEFAULT '',
     patient_id UUID REFERENCES patients(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

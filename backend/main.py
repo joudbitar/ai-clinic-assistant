@@ -58,7 +58,6 @@ class PatientCreate(BaseModel):
 class UploadResponse(BaseModel):
     id: str
     filename: str
-    url: str
     transcript: Optional[str] = None
     patient_id: Optional[str] = None
     created_at: datetime
@@ -136,8 +135,9 @@ async def upload_audio(
     patient_id: Optional[str] = Form(None)
 ):
     """
-    Upload audio file, save to Supabase Storage, insert record to database,
-    link to patient, and transcribe using OpenAI Whisper.
+    Process audio file temporarily, transcribe using OpenAI Whisper, 
+    and store only the transcript in database linked to patient.
+    Audio files are not permanently stored to save costs and storage.
     """
     try:
         logger.info(f"Received file upload: {file.filename}, content_type: {file.content_type}, patient_id: {patient_id}")
@@ -150,7 +150,7 @@ async def upload_audio(
                 detail="Only audio files are allowed"
             )
         
-        # Generate unique filename
+        # Generate unique filename for identification
         file_extension = Path(file.filename or "recording.m4a").suffix
         unique_filename = f"{uuid.uuid4()}{file_extension}"
         
@@ -158,66 +158,9 @@ async def upload_audio(
         file_content = await file.read()
         logger.info(f"File size: {len(file_content)} bytes")
         
-        # Upload to Supabase Storage
-        try:
-            logger.info("Uploading to Supabase Storage...")
-            storage_response = supabase.storage.from_("audio-files").upload(
-                unique_filename, 
-                file_content,
-                file_options={"content-type": file.content_type}
-            )
-            logger.info(f"Upload response: {storage_response}")
-        except Exception as e:
-            logger.error(f"Supabase Storage upload failed: {str(e)}")
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Failed to upload to storage: {str(e)}"
-            )
-        
-        # Get public URL
-        try:
-            public_url_response = supabase.storage.from_("audio-files").get_public_url(unique_filename)
-            public_url = public_url_response
-            logger.info(f"Public URL: {public_url}")
-        except Exception as e:
-            logger.error(f"Failed to get public URL: {str(e)}")
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Failed to get public URL: {str(e)}"
-            )
-        
-        # Insert record into database
+        # Generate IDs for database
         recording_id = str(uuid.uuid4())
         current_time = datetime.utcnow()
-        
-        try:
-            logger.info("Inserting record into database...")
-            recording_data = {
-                "id": recording_id,
-                "filename": unique_filename,
-                "url": public_url,
-                "transcript": "",  # Initially empty
-                "created_at": current_time.isoformat()
-            }
-            
-            # Add patient_id if provided
-            if patient_id:
-                recording_data["patient_id"] = patient_id
-                logger.info(f"Linking recording to patient: {patient_id}")
-            
-            db_response = supabase.table("recordings").insert(recording_data).execute()
-            logger.info(f"Database insert response: {db_response}")
-        except Exception as e:
-            logger.error(f"Database insert failed: {str(e)}")
-            # Try to clean up uploaded file
-            try:
-                supabase.storage.from_("audio-files").remove([unique_filename])
-            except:
-                pass
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Failed to insert database record: {str(e)}"
-            )
         
         # Transcribe audio using OpenAI Whisper with segmentation for long files
         transcript = ""
@@ -399,23 +342,35 @@ async def upload_audio(
             # Don't fail the entire request if transcription fails
             transcript = f"Transcription failed: {str(e)}"
         
-        # Update database record with transcript
+        # Insert record into database with transcript
         try:
-            logger.info("Updating database with transcript...")
-            update_response = supabase.table("recordings").update({
-                "transcript": transcript
-            }).eq("id", recording_id).execute()
-            logger.info(f"Database update response: {update_response}")
+            logger.info("Inserting record into database with transcript...")
+            recording_data = {
+                "id": recording_id,
+                "filename": unique_filename,
+                "transcript": transcript,
+                "created_at": current_time.isoformat()
+            }
+            
+            # Add patient_id if provided
+            if patient_id:
+                recording_data["patient_id"] = patient_id
+                logger.info(f"Linking recording to patient: {patient_id}")
+            
+            db_response = supabase.table("recordings").insert(recording_data).execute()
+            logger.info(f"Database insert response: {db_response}")
         except Exception as e:
-            logger.error(f"Failed to update transcript: {str(e)}")
-            # Don't fail the request if transcript update fails
+            logger.error(f"Database insert failed: {str(e)}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Failed to insert database record: {str(e)}"
+            )
         
-        logger.info(f"Upload process completed successfully for {unique_filename}")
+        logger.info(f"Transcription process completed successfully for {unique_filename}")
         
         return UploadResponse(
             id=recording_id,
             filename=unique_filename,
-            url=public_url,
             transcript=transcript,
             patient_id=patient_id,
             created_at=current_time
