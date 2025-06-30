@@ -61,7 +61,12 @@ export default function AudioRecorder() {
       uri: string;
       duration: number;
       timestamp: Date;
-      uploadStatus?: "uploading" | "uploaded" | "failed" | "local";
+      uploadStatus?:
+        | "uploading"
+        | "uploaded"
+        | "failed"
+        | "local"
+        | "transcription_failed";
       transcriptId?: string;
       transcript?: string;
       cloudUrl?: string;
@@ -156,7 +161,7 @@ export default function AudioRecorder() {
             date_of_birth: dob.trim(),
             phone: phone.trim(),
           },
-          timeout: 10000,
+          timeout: 30000, // 30 seconds for patient search
         }
       );
 
@@ -292,7 +297,7 @@ export default function AudioRecorder() {
         headers: {
           "Content-Type": "multipart/form-data",
         },
-        timeout: 30000, // 30 second timeout
+        timeout: 1800000, // 30 minutes timeout for very large files
         onUploadProgress: (progressEvent) => {
           const progress = progressEvent.total
             ? Math.round((progressEvent.loaded * 100) / progressEvent.total)
@@ -304,30 +309,75 @@ export default function AudioRecorder() {
 
       console.log("Upload response:", response.data);
 
-      // Update recording with upload success
-      setRecordings((prev) =>
-        prev.map((rec) =>
-          rec.id === recordingId
-            ? {
-                ...rec,
-                uploadStatus: "uploaded" as const,
-                transcriptId: response.data.id,
-                transcript: response.data.transcript,
-                cloudUrl: response.data.url,
-              }
-            : rec
-        )
-      );
+      // Check if transcription actually succeeded
+      const transcript = response.data.transcript || "";
+      const transcriptionFailed =
+        transcript.toLowerCase().includes("transcription failed") ||
+        transcript.toLowerCase().includes("failed to transcribe") ||
+        transcript.trim() === "";
 
-      // Show success message
-      Alert.alert(
-        "Upload Successful",
-        `Recording uploaded and transcribed successfully!\n\nTranscript: ${response.data.transcript?.substring(
-          0,
-          100
-        )}${response.data.transcript?.length > 100 ? "..." : ""}`,
-        [{ text: "OK" }]
-      );
+      if (transcriptionFailed) {
+        console.warn("Transcription failed, marking as failed:", transcript);
+
+        // Update recording with transcription failure status
+        setRecordings((prev) =>
+          prev.map((rec) =>
+            rec.id === recordingId
+              ? {
+                  ...rec,
+                  uploadStatus: "transcription_failed" as const,
+                  transcriptId: response.data.id,
+                  transcript: transcript,
+                  cloudUrl: response.data.url,
+                }
+              : rec
+          )
+        );
+
+        // Show transcription failed message with retry option
+        Alert.alert(
+          "Transcription Failed",
+          `File uploaded successfully but transcription failed:\n\n${transcript.substring(
+            0,
+            150
+          )}${transcript.length > 150 ? "..." : ""}`,
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Retry Transcription",
+              onPress: () => {
+                console.log("Retrying transcription for:", filename);
+                uploadAudioFile(uri, recordingId, filename, patientId);
+              },
+            },
+          ]
+        );
+      } else {
+        // Update recording with upload success
+        setRecordings((prev) =>
+          prev.map((rec) =>
+            rec.id === recordingId
+              ? {
+                  ...rec,
+                  uploadStatus: "uploaded" as const,
+                  transcriptId: response.data.id,
+                  transcript: response.data.transcript,
+                  cloudUrl: response.data.url,
+                }
+              : rec
+          )
+        );
+
+        // Show success message
+        Alert.alert(
+          "Upload Successful",
+          `Recording uploaded and transcribed successfully!\n\nTranscript: ${response.data.transcript?.substring(
+            0,
+            100
+          )}${response.data.transcript?.length > 100 ? "..." : ""}`,
+          [{ text: "OK" }]
+        );
+      }
 
       return response.data;
     } catch (error: any) {
@@ -767,6 +817,9 @@ export default function AudioRecorder() {
                                   ? "#007AFF20"
                                   : recording.uploadStatus === "failed"
                                   ? "#FF3B3020"
+                                  : recording.uploadStatus ===
+                                    "transcription_failed"
+                                  ? "#FF950020"
                                   : "#8E8E9320",
                             },
                           ]}
@@ -779,6 +832,9 @@ export default function AudioRecorder() {
                                 ? "cloud-upload"
                                 : recording.uploadStatus === "failed"
                                 ? "cloud-offline"
+                                : recording.uploadStatus ===
+                                  "transcription_failed"
+                                ? "warning"
                                 : "phone-portrait"
                             }
                             size={10}
@@ -789,6 +845,9 @@ export default function AudioRecorder() {
                                 ? "#007AFF"
                                 : recording.uploadStatus === "failed"
                                 ? "#FF3B30"
+                                : recording.uploadStatus ===
+                                  "transcription_failed"
+                                ? "#FF9500"
                                 : "#8E8E93"
                             }
                           />
@@ -803,6 +862,9 @@ export default function AudioRecorder() {
                                     ? "#007AFF"
                                     : recording.uploadStatus === "failed"
                                     ? "#FF3B30"
+                                    : recording.uploadStatus ===
+                                      "transcription_failed"
+                                    ? "#FF9500"
                                     : "#8E8E93",
                               },
                             ]}
@@ -813,6 +875,9 @@ export default function AudioRecorder() {
                               ? `${currentUploadProgress}%`
                               : recording.uploadStatus === "failed"
                               ? "Failed"
+                              : recording.uploadStatus ===
+                                "transcription_failed"
+                              ? "Transcription Failed"
                               : "Local"}
                           </Text>
                         </View>
@@ -846,7 +911,8 @@ export default function AudioRecorder() {
                         </Text>
                       </TouchableOpacity>
 
-                      {recording.uploadStatus === "failed" && (
+                      {(recording.uploadStatus === "failed" ||
+                        recording.uploadStatus === "transcription_failed") && (
                         <TouchableOpacity
                           style={styles.retryButton}
                           onPress={() =>
@@ -859,9 +925,51 @@ export default function AudioRecorder() {
                           }
                         >
                           <Ionicons name="refresh" size={14} color="#FF9500" />
-                          <Text style={styles.retryButtonText}>Retry</Text>
+                          <Text style={styles.retryButtonText}>
+                            {recording.uploadStatus === "transcription_failed"
+                              ? "Retry Transcription"
+                              : "Retry"}
+                          </Text>
                         </TouchableOpacity>
                       )}
+
+                      {/* Temporary: Force re-upload for any recording */}
+                      <TouchableOpacity
+                        style={[
+                          styles.retryButton,
+                          { backgroundColor: "#34C75910" },
+                        ]}
+                        onPress={() => {
+                          Alert.alert(
+                            "Force Re-upload",
+                            "This will re-upload and re-transcribe the recording. Continue?",
+                            [
+                              { text: "Cancel", style: "cancel" },
+                              {
+                                text: "Re-upload",
+                                onPress: () =>
+                                  uploadAudioFile(
+                                    recording.uri,
+                                    recording.id,
+                                    filename,
+                                    recording.patientId
+                                  ),
+                              },
+                            ]
+                          );
+                        }}
+                      >
+                        <Ionicons
+                          name="cloud-upload"
+                          size={14}
+                          color="#34C759"
+                        />
+                        <Text
+                          style={[styles.retryButtonText, { color: "#34C759" }]}
+                        >
+                          Force Re-upload
+                        </Text>
+                      </TouchableOpacity>
 
                       <TouchableOpacity
                         style={styles.uriButton}

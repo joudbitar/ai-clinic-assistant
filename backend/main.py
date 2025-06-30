@@ -219,29 +219,180 @@ async def upload_audio(
                 detail=f"Failed to insert database record: {str(e)}"
             )
         
-        # Transcribe audio using OpenAI Whisper
+        # Transcribe audio using OpenAI Whisper with segmentation for long files
         transcript = ""
         try:
             logger.info("Starting transcription with OpenAI Whisper...")
             
-            # Create a temporary file for OpenAI API
+            # Create temporary file for processing
             temp_file_path = f"/tmp/{unique_filename}"
             with open(temp_file_path, "wb") as temp_file:
                 temp_file.write(file_content)
             
-            # Transcribe with OpenAI Whisper
-            with open(temp_file_path, "rb") as audio_file:
-                transcription_response = openai.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_file,
-                    response_format="text"
-                )
-                transcript = transcription_response.strip()
+            # Use ffmpeg to get audio duration and segment if needed
+            import subprocess
+            import json
             
-            # Clean up temp file
-            os.unlink(temp_file_path)
+            # Get audio duration using ffprobe
+            logger.info("Getting audio duration with ffprobe...")
+            try:
+                duration_cmd = [
+                    "ffprobe", "-v", "quiet", "-print_format", "json",
+                    "-show_format", temp_file_path
+                ]
+                duration_result = subprocess.run(duration_cmd, capture_output=True, text=True, check=True)
+                duration_info = json.loads(duration_result.stdout)
+                duration_seconds = float(duration_info["format"]["duration"])
+                duration_minutes = duration_seconds / 60
+                logger.info(f"Audio duration: {duration_minutes:.2f} minutes ({duration_seconds:.1f} seconds)")
+            except Exception as e:
+                logger.error(f"Failed to get duration with ffprobe: {e}")
+                # Fallback: assume it's a long file and try segmentation anyway
+                duration_minutes = 15  # Default to assume it's long
             
-            logger.info(f"Transcription completed: {transcript[:100]}...")
+            if duration_minutes > 10:
+                logger.info(f"Long audio detected ({duration_minutes:.2f} min). Segmenting into 5-minute chunks...")
+                
+                # Segment audio into 5-minute chunks using ffmpeg
+                chunk_duration = 300  # 5 minutes in seconds
+                transcripts = []
+                chunk_number = 0
+                
+                start_time = 0
+                while start_time < duration_seconds:
+                    chunk_number += 1
+                    chunk_filename = f"/tmp/chunk_{chunk_number}_{unique_filename}.wav"
+                    
+                    logger.info(f"Creating chunk {chunk_number} starting at {start_time:.1f}s")
+                    
+                    # Use ffmpeg to extract chunk
+                    try:
+                        ffmpeg_cmd = [
+                            "ffmpeg", "-i", temp_file_path,
+                            "-ss", str(start_time),
+                            "-t", str(chunk_duration),
+                            "-acodec", "pcm_s16le",
+                            "-ar", "16000",
+                            "-ac", "1",
+                            "-y",  # Overwrite output
+                            chunk_filename
+                        ]
+                        subprocess.run(ffmpeg_cmd, capture_output=True, check=True)
+                        
+                        # Check if chunk file was created and has content
+                        if os.path.exists(chunk_filename) and os.path.getsize(chunk_filename) > 1000:
+                            logger.info(f"Chunk {chunk_number} created successfully")
+                            
+                            # Transcribe this chunk
+                            try:
+                                with open(chunk_filename, "rb") as chunk_file:
+                                    chunk_transcription = openai.audio.transcriptions.create(
+                                        model="whisper-1",
+                                        file=chunk_file,
+                                        response_format="text"
+                                    )
+                                    chunk_transcript = chunk_transcription.strip()
+                                    
+                                if chunk_transcript:
+                                    transcripts.append(f"[Segment {chunk_number}] {chunk_transcript}")
+                                    logger.info(f"Chunk {chunk_number} transcribed: {chunk_transcript[:50]}...")
+                                else:
+                                    logger.warning(f"Chunk {chunk_number} produced empty transcript")
+                                    
+                            except Exception as e:
+                                logger.error(f"Failed to transcribe chunk {chunk_number}: {str(e)}")
+                                transcripts.append(f"[Segment {chunk_number}] Transcription failed: {str(e)}")
+                        else:
+                            logger.warning(f"Chunk {chunk_number} file not created or too small")
+                            
+                    except subprocess.CalledProcessError as e:
+                        logger.error(f"FFmpeg failed for chunk {chunk_number}: {e}")
+                        transcripts.append(f"[Segment {chunk_number}] Segmentation failed")
+                    
+                    finally:
+                        # Clean up chunk file
+                        try:
+                            if os.path.exists(chunk_filename):
+                                os.unlink(chunk_filename)
+                        except:
+                            pass
+                    
+                    start_time += chunk_duration
+                
+                # Combine all transcripts
+                if transcripts:
+                    transcript = "\n\n".join(transcripts)
+                    logger.info(f"Segmented transcription completed. Total segments: {len(transcripts)}")
+                else:
+                    transcript = "Transcription failed: No segments could be processed"
+                    logger.error("No successful segment transcriptions")
+                    
+            else:
+                # File is short enough, transcribe directly
+                logger.info("Short audio file, transcribing directly...")
+                
+                # Check file size first (25MB limit)
+                file_size_mb = len(file_content) / (1024 * 1024)
+                logger.info(f"File size: {file_size_mb:.2f} MB")
+                
+                if file_size_mb > 25:
+                    # Convert to a more compressed format using ffmpeg
+                    logger.info("File too large, converting to compressed format with ffmpeg...")
+                    compressed_path = f"/tmp/compressed_{unique_filename}.wav"
+                    
+                    try:
+                        compress_cmd = [
+                            "ffmpeg", "-i", temp_file_path,
+                            "-acodec", "pcm_s16le",
+                            "-ar", "16000",
+                            "-ac", "1",
+                            "-y",  # Overwrite output
+                            compressed_path
+                        ]
+                        subprocess.run(compress_cmd, capture_output=True, check=True)
+                        
+                        # Check compressed size
+                        compressed_size_mb = os.path.getsize(compressed_path) / (1024 * 1024)
+                        logger.info(f"Compressed file size: {compressed_size_mb:.2f} MB")
+                        
+                        if compressed_size_mb <= 25:
+                            with open(compressed_path, "rb") as audio_file:
+                                transcription_response = openai.audio.transcriptions.create(
+                                    model="whisper-1",
+                                    file=audio_file,
+                                    response_format="text"
+                                )
+                                transcript = transcription_response.strip()
+                        else:
+                            transcript = f"File too large even after compression ({compressed_size_mb:.2f} MB)"
+                        
+                    except subprocess.CalledProcessError as e:
+                        logger.error(f"FFmpeg compression failed: {e}")
+                        transcript = "Transcription failed: Audio compression failed"
+                    
+                    # Clean up compressed file
+                    try:
+                        if os.path.exists(compressed_path):
+                            os.unlink(compressed_path)
+                    except:
+                        pass
+                else:
+                    # Direct transcription
+                    with open(temp_file_path, "rb") as audio_file:
+                        transcription_response = openai.audio.transcriptions.create(
+                            model="whisper-1",
+                            file=audio_file,
+                            response_format="text"
+                        )
+                        transcript = transcription_response.strip()
+                
+                logger.info(f"Direct transcription completed: {transcript[:100]}...")
+            
+            # Clean up main temp file
+            try:
+                os.unlink(temp_file_path)
+            except:
+                pass
             
         except Exception as e:
             logger.error(f"Transcription failed: {str(e)}")
