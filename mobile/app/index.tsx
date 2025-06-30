@@ -42,10 +42,7 @@ export default function AudioRecorder() {
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>(
-    {}
-  );
+  const [isTranscribing, setIsTranscribing] = useState(false);
 
   // Patient form state
   const [showPatientForm, setShowPatientForm] = useState(false);
@@ -61,15 +58,9 @@ export default function AudioRecorder() {
       uri: string;
       duration: number;
       timestamp: Date;
-      uploadStatus?:
-        | "uploading"
-        | "uploaded"
-        | "failed"
-        | "local"
-        | "transcription_failed";
+      transcriptionStatus?: "local" | "transcribing" | "transcribed" | "failed";
       transcriptId?: string;
       transcript?: string;
-      cloudUrl?: string;
       patientId?: string;
       patientName?: string;
     }>
@@ -244,11 +235,11 @@ export default function AudioRecorder() {
       setIsUploading(true);
       setUploadProgress((prev) => ({ ...prev, [recordingId]: 0 }));
 
-      // Update recording status to uploading
+      // Update recording status to transcribing
       setRecordings((prev) =>
         prev.map((rec) =>
           rec.id === recordingId
-            ? { ...rec, uploadStatus: "uploading" as const }
+            ? { ...rec, transcriptionStatus: "transcribing" as const }
             : rec
         )
       );
@@ -325,10 +316,9 @@ export default function AudioRecorder() {
             rec.id === recordingId
               ? {
                   ...rec,
-                  uploadStatus: "transcription_failed" as const,
+                  transcriptionStatus: "failed" as const,
                   transcriptId: response.data.id,
                   transcript: transcript,
-                  cloudUrl: response.data.url,
                 }
               : rec
           )
@@ -353,16 +343,15 @@ export default function AudioRecorder() {
           ]
         );
       } else {
-        // Update recording with upload success
+        // Update recording with transcription success
         setRecordings((prev) =>
           prev.map((rec) =>
             rec.id === recordingId
               ? {
                   ...rec,
-                  uploadStatus: "uploaded" as const,
+                  transcriptionStatus: "transcribed" as const,
                   transcriptId: response.data.id,
                   transcript: response.data.transcript,
-                  cloudUrl: response.data.url,
                 }
               : rec
           )
@@ -387,7 +376,7 @@ export default function AudioRecorder() {
       setRecordings((prev) =>
         prev.map((rec) =>
           rec.id === recordingId
-            ? { ...rec, uploadStatus: "failed" as const }
+            ? { ...rec, transcriptionStatus: "failed" as const }
             : rec
         )
       );
@@ -498,7 +487,7 @@ export default function AudioRecorder() {
           uri: newUri,
           duration: recordingDuration,
           timestamp,
-          uploadStatus: "local" as const,
+          transcriptionStatus: "local" as const,
           patientId: currentPatient?.id,
           patientName: currentPatient?.name,
         };
@@ -805,49 +794,43 @@ export default function AudioRecorder() {
                   <View style={styles.recordingInfo}>
                     <View style={styles.recordingHeader}>
                       <Text style={styles.recordingFilename}>{filename}</Text>
-                      {recording.uploadStatus && (
+                      {recording.transcriptionStatus && (
                         <View
                           style={[
                             styles.statusBadge,
                             {
                               backgroundColor:
-                                recording.uploadStatus === "uploaded"
+                                recording.transcriptionStatus === "transcribed"
                                   ? "#34C75920"
-                                  : recording.uploadStatus === "uploading"
+                                  : recording.transcriptionStatus ===
+                                    "transcribing"
                                   ? "#007AFF20"
-                                  : recording.uploadStatus === "failed"
+                                  : recording.transcriptionStatus === "failed"
                                   ? "#FF3B3020"
-                                  : recording.uploadStatus ===
-                                    "transcription_failed"
-                                  ? "#FF950020"
                                   : "#8E8E9320",
                             },
                           ]}
                         >
                           <Ionicons
                             name={
-                              recording.uploadStatus === "uploaded"
-                                ? "cloud-done"
-                                : recording.uploadStatus === "uploading"
-                                ? "cloud-upload"
-                                : recording.uploadStatus === "failed"
-                                ? "cloud-offline"
-                                : recording.uploadStatus ===
-                                  "transcription_failed"
+                              recording.transcriptionStatus === "transcribed"
+                                ? "document-text"
+                                : recording.transcriptionStatus ===
+                                  "transcribing"
+                                ? "refresh"
+                                : recording.transcriptionStatus === "failed"
                                 ? "warning"
                                 : "phone-portrait"
                             }
                             size={10}
                             color={
-                              recording.uploadStatus === "uploaded"
+                              recording.transcriptionStatus === "transcribed"
                                 ? "#34C759"
-                                : recording.uploadStatus === "uploading"
+                                : recording.transcriptionStatus ===
+                                  "transcribing"
                                 ? "#007AFF"
-                                : recording.uploadStatus === "failed"
+                                : recording.transcriptionStatus === "failed"
                                 ? "#FF3B30"
-                                : recording.uploadStatus ===
-                                  "transcription_failed"
-                                ? "#FF9500"
                                 : "#8E8E93"
                             }
                           />
@@ -856,28 +839,24 @@ export default function AudioRecorder() {
                               styles.statusText,
                               {
                                 color:
-                                  recording.uploadStatus === "uploaded"
+                                  recording.transcriptionStatus ===
+                                  "transcribed"
                                     ? "#34C759"
-                                    : recording.uploadStatus === "uploading"
+                                    : recording.transcriptionStatus ===
+                                      "transcribing"
                                     ? "#007AFF"
-                                    : recording.uploadStatus === "failed"
+                                    : recording.transcriptionStatus === "failed"
                                     ? "#FF3B30"
-                                    : recording.uploadStatus ===
-                                      "transcription_failed"
-                                    ? "#FF9500"
                                     : "#8E8E93",
                               },
                             ]}
                           >
-                            {recording.uploadStatus === "uploaded"
-                              ? "Synced"
-                              : recording.uploadStatus === "uploading"
-                              ? `${currentUploadProgress}%`
-                              : recording.uploadStatus === "failed"
+                            {recording.transcriptionStatus === "transcribed"
+                              ? "Transcribed"
+                              : recording.transcriptionStatus === "transcribing"
+                              ? "Transcribing..."
+                              : recording.transcriptionStatus === "failed"
                               ? "Failed"
-                              : recording.uploadStatus ===
-                                "transcription_failed"
-                              ? "Transcription Failed"
                               : "Local"}
                           </Text>
                         </View>
@@ -911,8 +890,7 @@ export default function AudioRecorder() {
                         </Text>
                       </TouchableOpacity>
 
-                      {(recording.uploadStatus === "failed" ||
-                        recording.uploadStatus === "transcription_failed") && (
+                      {recording.transcriptionStatus === "failed" && (
                         <TouchableOpacity
                           style={styles.retryButton}
                           onPress={() =>
@@ -926,9 +904,7 @@ export default function AudioRecorder() {
                         >
                           <Ionicons name="refresh" size={14} color="#FF9500" />
                           <Text style={styles.retryButtonText}>
-                            {recording.uploadStatus === "transcription_failed"
-                              ? "Retry Transcription"
-                              : "Retry"}
+                            Retry Transcription
                           </Text>
                         </TouchableOpacity>
                       )}
