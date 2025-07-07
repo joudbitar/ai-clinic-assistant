@@ -18,4 +18,5 @@ This is the full-stack monorepo for Dr. Nizar Bitar's AI-powered patient manager
 ## Authors
 - Joud Bitar
 - Reda Bitar
+- Bilal Bitar
 

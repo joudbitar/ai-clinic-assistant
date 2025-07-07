@@ -288,33 +288,36 @@ export default function PatientDetailPage() {
   }
 
   return (
-    <div className="w-full px-2">
+    <div className="container mx-auto p-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4 px-4 py-2 bg-white border-b">
-        <div className="flex items-center space-x-4">
-          <Button 
-            variant="ghost" 
-            onClick={() => navigate('/patients')}
-            className="flex items-center space-x-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span>Back to Patients</span>
-          </Button>
-          <h1 className="text-xl font-semibold">Patient Details</h1>
-        </div>
-        <div className="flex items-center space-x-3">
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => navigate(`/record?patientId=${patientId}`)}
-          >
-            <FileText className="h-4 w-4 mr-2" />
-            Record Consultation
-          </Button>
-          <Button variant="outline" size="sm">
-            <Edit className="h-4 w-4 mr-2" />
-            Edit Patient
-          </Button>
+      <div className="mb-6">
+        <Button 
+          variant="ghost" 
+          onClick={() => navigate('/')}
+          className="mb-4"
+        >
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to Home
+        </Button>
+        
+        <div className="flex items-center justify-between mb-4 px-4 py-2 bg-white border-b">
+          <div className="flex items-center space-x-4">
+            <h1 className="text-xl font-semibold">Patient Details</h1>
+          </div>
+          <div className="flex items-center space-x-3">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => navigate(`/record?patientId=${patientId}`)}
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              Record Consultation
+            </Button>
+            <Button variant="outline" size="sm">
+              <Edit className="h-4 w-4 mr-2" />
+              Edit Patient
+            </Button>
+          </div>
         </div>
       </div>
 
