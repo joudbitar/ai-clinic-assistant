@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { 
   User, Heart, Activity, Pill, Zap, Scissors, Target, 
   FlaskConical, Dna, Scan, History, Calendar, Phone, 
-  Mail, MapPin, Briefcase, Globe, FileText, Eye, Edit, X, Plus, Trash2, Save
+  Mail, MapPin, Briefcase, Globe, FileText, Eye, Edit, X, Plus, Trash2, Save, AlertTriangle, TrendingUp, Shield
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -26,6 +26,15 @@ import {
   formatDate,
   formatPhone
 } from '@/config/fieldConfigs'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+
+// Import sections
+import RiskFactorsSection from './RiskFactorsSection'
+import SurgeriesSection from './SurgeriesSection'
+import MedicationsSection from './MedicationsSection'
+import ChemotherapySection from './ChemotherapySection'
+import RadiotherapySection from './RadiotherapySection'
+import OtherTreatmentsSection from './OtherTreatmentsSection'
 
 // Demographics Section
 export function DemographicsSection({ patient, patientId }) {
@@ -226,7 +235,7 @@ export function MedicalHistorySection({ histories, historyHandlers, isLoading })
       if (isAdding) {
         await historyHandlers.onCreate(dataToSave)
       } else {
-        await historyHandlers.onUpdate(editingId, dataToSave)
+        await historyHandlers.onUpdate({ ...dataToSave, id: editingId })
       }
       handleCancel()
     } catch (error) {
@@ -1105,109 +1114,7 @@ export function TreatmentHistorySection({
   )
 }
 
-// Medications Section
-export function MedicationsSection({ medications, medicationHandlers, isLoading }) {
-  const getRouteColor = (route) => {
-    const colors = {
-      oral: 'bg-blue-100 text-blue-800',
-      iv: 'bg-purple-100 text-purple-800',
-      im: 'bg-green-100 text-green-800',
-      sc: 'bg-yellow-100 text-yellow-800',
-      topical: 'bg-orange-100 text-orange-800'
-    }
-    return colors[route] || 'bg-gray-100 text-gray-800'
-  }
 
-  return (
-    <div className="space-y-6">
-      {/* Beautiful EMR Display */}
-      <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Pill className="h-5 w-5 text-blue-600" />
-            Current Medications
-            {medications?.length > 0 && (
-              <Badge variant="secondary" className="ml-2">
-                {medications.length}
-              </Badge>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="space-y-4">
-              {[...Array(3)].map((_, i) => (
-                <div key={i} className="h-16 bg-gray-200 rounded animate-pulse" />
-              ))}
-            </div>
-          ) : medications?.length > 0 ? (
-            <div className="space-y-3">
-              {medications.map((medication, index) => (
-                <div key={medication.id || index} className="border rounded-lg p-3 hover:shadow-sm transition-shadow">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-center space-x-2">
-                      <div className="font-medium text-sm">{medication.name}</div>
-                      {medication.dose && (
-                        <Badge variant="outline" className="text-xs">
-                          {medication.dose}
-                        </Badge>
-                      )}
-                      {medication.route && (
-                        <Badge className={getRouteColor(medication.route)}>
-                          {medication.route.toUpperCase()}
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {formatDate(medication.start_date)}
-                    </div>
-                  </div>
-                  {medication.frequency && (
-                    <div className="text-xs text-gray-600 mb-1">
-                      <span className="font-medium">Frequency:</span> {medication.frequency}
-                    </div>
-                  )}
-                  {medication.indication && (
-                    <div className="text-xs text-gray-600">
-                      <span className="font-medium">Indication:</span> {medication.indication}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-gray-500">
-              <Pill className="h-8 w-8 mx-auto mb-2 text-gray-400" />
-              <p>No current medications recorded</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Editable Table for CRUD Operations */}
-      <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Edit className="h-5 w-5 text-green-600" />
-            Manage Current Medications
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ClinicalEditableTable
-            data={medications}
-            fields={medicationFields}
-            onAdd={medicationHandlers.onCreate}
-            onUpdate={medicationHandlers.onUpdate}
-            onDelete={medicationHandlers.onDelete}
-            isLoading={isLoading}
-            title="Concomitant Medications"
-            addButtonText="Add Medication"
-          />
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
 
 // Lab Results & Tests Section
 export function LabResultsSection({ 
@@ -1827,4 +1734,382 @@ export function HistorySection({
       </Card>
     </div>
   )
-} 
+}
+
+const EMRClinicalSections = ({ 
+  patientId, 
+  patient,
+  allMedicalData = {},
+  onUpdateHistory,
+  onCreateHistory,
+  onDeleteHistory,
+  onUpdateSurgery,
+  onCreateSurgery,
+  onDeleteSurgery,
+  onUpdateMedication,
+  onCreateMedication,
+  onDeleteMedication,
+  onUpdateChemotherapy,
+  onCreateChemotherapy,
+  onDeleteChemotherapy,
+  onUpdateRadiotherapy,
+  onCreateRadiotherapy,
+  onDeleteRadiotherapy,
+  onUpdateOtherTreatment,
+  onCreateOtherTreatment,
+  onDeleteOtherTreatment,
+  isLoading = false 
+}) => {
+  const [clinicalNotes, setClinicalNotes] = useState(patient?.clinical_notes || '')
+  const [isEditingNotes, setIsEditingNotes] = useState(false)
+
+  // Update clinical notes when patient data changes
+  useEffect(() => {
+    setClinicalNotes(patient?.clinical_notes || '')
+  }, [patient?.clinical_notes])
+
+  // Extract data from allMedicalData
+  const histories = allMedicalData.histories || []
+  const surgeries = allMedicalData.surgeries || []
+  const medications = allMedicalData.medications || []
+  const chemotherapy = allMedicalData.chemotherapy || []
+  const radiotherapy = allMedicalData.radiotherapy || []
+  const otherTreatments = allMedicalData.other_treatments || []
+
+  // Group histories by type for risk factors
+  const historiesByType = histories.reduce((acc, history) => {
+    const type = history.history_type || 'other'
+    if (!acc[type]) acc[type] = []
+    acc[type].push(history)
+    return acc
+  }, {})
+
+  // Calculate summary statistics
+  const getOverviewStats = () => {
+    const smokingHistory = historiesByType.smoking || []
+    const familyHistory = historiesByType.family || []
+    const activeMedications = medications.filter(med => !med.end_date || new Date(med.end_date) > new Date())
+    
+    const riskFactors = []
+    
+    // Smoking risk
+    smokingHistory.forEach(smoking => {
+      if (smoking.pack_years && smoking.pack_years > 20) {
+        riskFactors.push({
+          type: 'High Smoking Risk',
+          value: `${smoking.pack_years} pack-years`,
+          color: 'bg-red-100 text-red-800'
+        })
+      }
+    })
+    
+    // Family history risk
+    if (familyHistory.length > 0) {
+      const cancerHistory = familyHistory.filter(h => 
+        h.description && h.description.toLowerCase().includes('cancer')
+      )
+      if (cancerHistory.length > 0) {
+        riskFactors.push({
+          type: 'Family Cancer History',
+          value: `${cancerHistory.length} relative(s)`,
+          color: 'bg-orange-100 text-orange-800'
+        })
+      }
+    }
+    
+    // Polypharmacy
+    if (activeMedications.length > 5) {
+      riskFactors.push({
+        type: 'Polypharmacy',
+        value: `${activeMedications.length} medications`,
+        color: 'bg-yellow-100 text-yellow-800'
+      })
+    }
+    
+    return {
+      totalHistories: histories.length,
+      totalSurgeries: surgeries.length,
+      totalMedications: medications.length,
+      activeMedications: activeMedications.length,
+      totalChemotherapy: chemotherapy.length,
+      totalRadiotherapy: radiotherapy.length,
+      totalOtherTreatments: otherTreatments.length,
+      riskFactors
+    }
+  }
+
+  const stats = getOverviewStats()
+
+  const handleSaveNotes = async () => {
+    try {
+      // Save clinical notes directly to patient record  
+      const API_BASE_URL = "http://localhost:8000"
+      const response = await fetch(`${API_BASE_URL}/patients/${patientId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          clinical_notes: clinicalNotes 
+        }),
+      })
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Backend error:', errorText)
+        
+        // If clinical_notes field doesn't exist, provide helpful instruction
+        if (response.status === 400 && errorText.includes('clinical_notes')) {
+          throw new Error('Clinical notes field not found in database. Please add a "clinical_notes" column (text type) to your patients table in Supabase.')
+        }
+        throw new Error(`Failed to save clinical notes (${response.status})`)
+      }
+      
+      setIsEditingNotes(false)
+      // Refresh will happen via useEffect when patient data updates
+      window.location.reload() // Simple refresh for now
+    } catch (error) {
+      console.error('Error saving clinical notes:', error)
+      alert('Error: ' + error.message + '\n\nTo fix: Add a "clinical_notes" column (text type) to your patients table in Supabase.')
+    }
+  }
+
+  return (
+    <div className="w-full">
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList className="grid w-full grid-cols-7">
+          <TabsTrigger value="overview" className="flex items-center gap-1">
+            <Activity className="h-4 w-4" />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="risk-factors" className="flex items-center gap-1">
+            <AlertTriangle className="h-4 w-4" />
+            Risk Factors
+          </TabsTrigger>
+          <TabsTrigger value="surgeries" className="flex items-center gap-1">
+            <Scissors className="h-4 w-4" />
+            Surgeries ({stats.totalSurgeries})
+          </TabsTrigger>
+          <TabsTrigger value="medications" className="flex items-center gap-1">
+            <Pill className="h-4 w-4" />
+            Medications ({stats.activeMedications})
+          </TabsTrigger>
+          <TabsTrigger value="chemotherapy" className="flex items-center gap-1">
+            <FlaskConical className="h-4 w-4" />
+            Chemotherapy ({stats.totalChemotherapy})
+          </TabsTrigger>
+          <TabsTrigger value="radiotherapy" className="flex items-center gap-1">
+            <Zap className="h-4 w-4" />
+            Radiotherapy ({stats.totalRadiotherapy})
+          </TabsTrigger>
+          <TabsTrigger value="other-treatments" className="flex items-center gap-1">
+            <Shield className="h-4 w-4" />
+            Other Treatments ({stats.totalOtherTreatments})
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Overview Tab */}
+        <TabsContent value="overview" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Summary Statistics */}
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-blue-500" />
+                  Medical History Summary
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="text-center p-3 bg-blue-50 rounded-lg">
+                    <div className="text-2xl font-bold text-blue-600">{stats.totalHistories}</div>
+                    <div className="text-sm text-blue-600">History Records</div>
+                  </div>
+                  <div className="text-center p-3 bg-green-50 rounded-lg">
+                    <div className="text-2xl font-bold text-green-600">{stats.totalSurgeries}</div>
+                    <div className="text-sm text-green-600">Surgeries</div>
+                  </div>
+                  <div className="text-center p-3 bg-purple-50 rounded-lg">
+                    <div className="text-2xl font-bold text-purple-600">{stats.activeMedications}</div>
+                    <div className="text-sm text-purple-600">Active Medications</div>
+                  </div>
+                  <div className="text-center p-3 bg-orange-50 rounded-lg">
+                    <div className="text-2xl font-bold text-orange-600">
+                      {stats.totalChemotherapy + stats.totalRadiotherapy + stats.totalOtherTreatments}
+                    </div>
+                    <div className="text-sm text-orange-600">Cancer Treatments</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Risk Factors Summary */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-red-500" />
+                  Risk Alerts
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {stats.riskFactors.length > 0 ? (
+                  <div className="space-y-2">
+                    {stats.riskFactors.map((risk, index) => (
+                      <Badge key={index} className={risk.color}>
+                        {risk.type}: {risk.value}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-sm">No significant risk factors identified</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Clinical Notes Section */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-blue-500" />
+                  Clinical Notes
+                </CardTitle>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setIsEditingNotes(!isEditingNotes)}
+                >
+                  <Edit className="h-4 w-4 mr-1" />
+                  {isEditingNotes ? 'Cancel' : (patient?.clinical_notes ? 'Edit Notes' : 'Add Notes')}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isEditingNotes ? (
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="clinical-notes">Clinical Notes</Label>
+                    <Textarea
+                      id="clinical-notes"
+                      value={clinicalNotes}
+                      onChange={(e) => setClinicalNotes(e.target.value)}
+                      placeholder="Enter clinical notes, observations, assessments, or other relevant information..."
+                      rows={8}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button onClick={handleSaveNotes} size="sm">
+                      <Save className="h-4 w-4 mr-1" />
+                      Save Notes
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        setIsEditingNotes(false)
+                        setClinicalNotes(patient?.clinical_notes || '')
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {patient?.clinical_notes ? (
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                        {patient.clinical_notes}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-gray-500 text-center py-8">
+                      <FileText className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                      <p>No clinical notes yet. Click "Add Notes" to start documenting.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Risk Factors Tab */}
+        <TabsContent value="risk-factors">
+          <RiskFactorsSection
+            patientId={patientId}
+            histories={historiesByType}
+            onUpdate={onUpdateHistory}
+            onCreate={onCreateHistory}
+            onDelete={onDeleteHistory}
+            isLoading={isLoading}
+          />
+        </TabsContent>
+
+        {/* Surgeries Tab */}
+        <TabsContent value="surgeries">
+          <SurgeriesSection
+            patientId={patientId}
+            surgeries={surgeries}
+            onUpdate={onUpdateSurgery}
+            onCreate={onCreateSurgery}
+            onDelete={onDeleteSurgery}
+            isLoading={isLoading}
+          />
+        </TabsContent>
+
+        {/* Medications Tab */}
+        <TabsContent value="medications">
+          <MedicationsSection
+            patientId={patientId}
+            medications={medications}
+            onUpdate={onUpdateMedication}
+            onCreate={onCreateMedication}
+            onDelete={onDeleteMedication}
+            isLoading={isLoading}
+          />
+        </TabsContent>
+
+        {/* Chemotherapy Tab */}
+        <TabsContent value="chemotherapy">
+          <ChemotherapySection
+            patientId={patientId}
+            chemotherapy={chemotherapy}
+            onUpdate={onUpdateChemotherapy}
+            onCreate={onCreateChemotherapy}
+            onDelete={onDeleteChemotherapy}
+            isLoading={isLoading}
+          />
+        </TabsContent>
+
+        {/* Radiotherapy Tab */}
+        <TabsContent value="radiotherapy">
+          <RadiotherapySection
+            patientId={patientId}
+            radiotherapy={radiotherapy}
+            onUpdate={onUpdateRadiotherapy}
+            onCreate={onCreateRadiotherapy}
+            onDelete={onDeleteRadiotherapy}
+            isLoading={isLoading}
+          />
+        </TabsContent>
+
+        {/* Other Treatments Tab */}
+        <TabsContent value="other-treatments">
+          <OtherTreatmentsSection
+            patientId={patientId}
+            otherTreatments={otherTreatments}
+            onUpdate={onUpdateOtherTreatment}
+            onCreate={onCreateOtherTreatment}
+            onDelete={onDeleteOtherTreatment}
+            isLoading={isLoading}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
+  )
+}
+
+export default EMRClinicalSections 

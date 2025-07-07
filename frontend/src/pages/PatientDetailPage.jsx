@@ -9,11 +9,21 @@ import { useToast } from '@/hooks/useToast.jsx'
 import { EMRPatientHeader } from '@/components/EMRPatientHeader'
 import { 
   DemographicsSection, 
-  HistorySection, 
-  MedicationsSection, 
   BaselinesSection, 
   ConsultationRecordsSection 
 } from '@/components/EMRClinicalSections'
+import EMRClinicalSections from '../components/EMRClinicalSections'
+import { 
+  usePatient, 
+  usePatientRecordings, 
+  usePatientHistories, 
+  usePatientPreviousSurgeries, 
+  usePatientConcomitantMedications, 
+  usePatientBaselines,
+  usePatientPreviousChemotherapy,
+  usePatientPreviousRadiotherapy,
+  usePatientPreviousOtherTreatments
+} from '../hooks/usePatients'
 
 export default function PatientDetailPage() {
   const { patientId } = useParams()
@@ -25,102 +35,16 @@ export default function PatientDetailPage() {
   const API_BASE_URL = "http://localhost:8000"
 
   // Fetch patient data
-  const { data: patient, isLoading: patientLoading, error: patientError } = useQuery({
-    queryKey: ['patient', patientId],
-    queryFn: async () => {
-      const response = await fetch(`${API_BASE_URL}/patients/${patientId}`)
-      if (!response.ok) {
-        throw new Error(`Failed to fetch patient: ${response.status} ${response.statusText}`)
-      }
-      return response.json()
-    },
-    enabled: !!patientId
-  })
+  const { data: patient, isLoading: patientLoading, error: patientError } = usePatient(patientId)
+  const { data: recordings = [], isLoading: recordingsLoading } = usePatientRecordings(patientId)
+  const { data: histories = [], isLoading: historiesLoading } = usePatientHistories(patientId)
+  const { data: surgeries = [], isLoading: surgeriesLoading } = usePatientPreviousSurgeries(patientId)
+  const { data: medications = [], isLoading: medicationsLoading } = usePatientConcomitantMedications(patientId)
+  const { data: baselines = [], isLoading: baselinesLoading } = usePatientBaselines(patientId)
+  const { data: chemotherapy = [], isLoading: chemotherapyLoading } = usePatientPreviousChemotherapy(patientId)
+  const { data: radiotherapy = [], isLoading: radiotherapyLoading } = usePatientPreviousRadiotherapy(patientId)
+  const { data: otherTreatments = [], isLoading: otherTreatmentsLoading } = usePatientPreviousOtherTreatments(patientId)
   
-  const { data: histories, isLoading: historiesLoading } = useQuery({
-    queryKey: ['patient-histories', patientId],
-    queryFn: async () => {
-      const response = await fetch(`${API_BASE_URL}/patients/${patientId}/histories`)
-      if (!response.ok) {
-        throw new Error(`Failed to fetch histories: ${response.status} ${response.statusText}`)
-      }
-      return response.json()
-    },
-    enabled: !!patientId
-  })
-  
-  const { data: chemotherapy, isLoading: chemoLoading } = useQuery({
-    queryKey: ['patient-chemotherapy', patientId],
-    queryFn: async () => {
-      const response = await fetch(`${API_BASE_URL}/patients/${patientId}/previous-chemotherapy`)
-      if (!response.ok) {
-        throw new Error(`Failed to fetch chemotherapy: ${response.status} ${response.statusText}`)
-      }
-      return response.json()
-    },
-    enabled: !!patientId
-  })
-  
-  const { data: radiotherapy, isLoading: radioLoading } = useQuery({
-    queryKey: ['patient-radiotherapy', patientId],
-    queryFn: async () => {
-      const response = await fetch(`${API_BASE_URL}/patients/${patientId}/previous-radiotherapy`)
-      if (!response.ok) {
-        throw new Error(`Failed to fetch radiotherapy: ${response.status} ${response.statusText}`)
-      }
-      return response.json()
-    },
-    enabled: !!patientId
-  })
-  
-  const { data: surgeries, isLoading: surgeriesLoading } = useQuery({
-    queryKey: ['patient-surgeries', patientId],
-    queryFn: async () => {
-      const response = await fetch(`${API_BASE_URL}/patients/${patientId}/previous-surgeries`)
-      if (!response.ok) {
-        throw new Error(`Failed to fetch surgeries: ${response.status} ${response.statusText}`)
-      }
-      return response.json()
-    },
-    enabled: !!patientId
-  })
-  
-  const { data: medications, isLoading: medicationsLoading } = useQuery({
-    queryKey: ['patient-medications', patientId],
-    queryFn: async () => {
-      const response = await fetch(`${API_BASE_URL}/patients/${patientId}/concomitant-medications`)
-      if (!response.ok) {
-        throw new Error(`Failed to fetch medications: ${response.status} ${response.statusText}`)
-      }
-      return response.json()
-    },
-    enabled: !!patientId
-  })
-  
-  const { data: baselines, isLoading: baselinesLoading } = useQuery({
-    queryKey: ['patient-baselines', patientId],
-    queryFn: async () => {
-      const response = await fetch(`${API_BASE_URL}/patients/${patientId}/baselines`)
-      if (!response.ok) {
-        throw new Error(`Failed to fetch baselines: ${response.status} ${response.statusText}`)
-      }
-      return response.json()
-    },
-    enabled: !!patientId
-  })
-  
-  const { data: recordings, isLoading: recordingsLoading } = useQuery({
-    queryKey: ['patient-recordings', patientId],
-    queryFn: async () => {
-      const response = await fetch(`${API_BASE_URL}/patients/${patientId}/recordings`)
-      if (!response.ok) {
-        throw new Error(`Failed to fetch recordings: ${response.status} ${response.statusText}`)
-      }
-      return response.json()
-    },
-    enabled: !!patientId
-  })
-
   // Mutations with generic handlers
   const createMutation = useMutation({
     mutationFn: async ({ endpoint, data }) => {
@@ -187,8 +111,6 @@ export default function PatientDetailPage() {
     }
   })
 
-
-
   // Handle table operations
   const handleCreateHistory = async (historyData) => {
     await createMutation.mutateAsync({ 
@@ -217,7 +139,7 @@ export default function PatientDetailPage() {
     await createMutation.mutateAsync({ 
       endpoint: `/patients/${patientId}/previous-chemotherapy`, 
       data: chemoData,
-      queryKey: 'patient-chemotherapy'
+      queryKey: 'patient-previous-chemotherapy'
     })
   }
 
@@ -225,14 +147,14 @@ export default function PatientDetailPage() {
     await updateMutation.mutateAsync({ 
       endpoint: `/chemotherapy/${updatedData.id}`,
       data: updatedData,
-      queryKey: 'patient-chemotherapy'
+      queryKey: 'patient-previous-chemotherapy'
     })
   }
 
   const handleDeleteChemotherapy = async (chemoId) => {
     await deleteMutation.mutateAsync({ 
       endpoint: `/chemotherapy/${chemoId}`,
-      queryKey: 'patient-chemotherapy'
+      queryKey: 'patient-previous-chemotherapy'
     })
   }
 
@@ -240,7 +162,7 @@ export default function PatientDetailPage() {
     await createMutation.mutateAsync({ 
       endpoint: `/patients/${patientId}/previous-radiotherapy`, 
       data: radioData,
-      queryKey: 'patient-radiotherapy'
+      queryKey: 'patient-previous-radiotherapy'
     })
   }
 
@@ -248,14 +170,14 @@ export default function PatientDetailPage() {
     await updateMutation.mutateAsync({ 
       endpoint: `/radiotherapy/${updatedData.id}`,
       data: updatedData,
-      queryKey: 'patient-radiotherapy'
+      queryKey: 'patient-previous-radiotherapy'
     })
   }
 
   const handleDeleteRadiotherapy = async (radioId) => {
     await deleteMutation.mutateAsync({ 
       endpoint: `/radiotherapy/${radioId}`,
-      queryKey: 'patient-radiotherapy'
+      queryKey: 'patient-previous-radiotherapy'
     })
   }
 
@@ -263,7 +185,7 @@ export default function PatientDetailPage() {
     await createMutation.mutateAsync({ 
       endpoint: `/patients/${patientId}/previous-surgeries`, 
       data: surgeryData,
-      queryKey: 'patient-surgeries'
+      queryKey: 'patient-previous-surgeries'
     })
   }
 
@@ -271,14 +193,14 @@ export default function PatientDetailPage() {
     await updateMutation.mutateAsync({ 
       endpoint: `/surgeries/${updatedData.id}`,
       data: updatedData,
-      queryKey: 'patient-surgeries'
+      queryKey: 'patient-previous-surgeries'
     })
   }
 
   const handleDeleteSurgery = async (surgeryId) => {
     await deleteMutation.mutateAsync({ 
       endpoint: `/surgeries/${surgeryId}`,
-      queryKey: 'patient-surgeries'
+      queryKey: 'patient-previous-surgeries'
     })
   }
 
@@ -286,7 +208,7 @@ export default function PatientDetailPage() {
     await createMutation.mutateAsync({ 
       endpoint: `/patients/${patientId}/concomitant-medications`, 
       data: medicationData,
-      queryKey: 'patient-medications'
+      queryKey: 'patient-concomitant-medications'
     })
   }
 
@@ -294,14 +216,14 @@ export default function PatientDetailPage() {
     await updateMutation.mutateAsync({ 
       endpoint: `/medications/${updatedData.id}`,
       data: updatedData,
-      queryKey: 'patient-medications'
+      queryKey: 'patient-concomitant-medications'
     })
   }
 
   const handleDeleteMedication = async (medicationId) => {
     await deleteMutation.mutateAsync({ 
       endpoint: `/medications/${medicationId}`,
-      queryKey: 'patient-medications'
+      queryKey: 'patient-concomitant-medications'
     })
   }
 
@@ -328,7 +250,29 @@ export default function PatientDetailPage() {
     })
   }
 
+  // Handle other treatments operations
+  const handleCreateOtherTreatment = async (treatmentData) => {
+    await createMutation.mutateAsync({ 
+      endpoint: `/patients/${patientId}/previous-other-treatments`, 
+      data: treatmentData,
+      queryKey: 'patient-previous-other-treatments'
+    })
+  }
 
+  const handleUpdateOtherTreatment = async (updatedData) => {
+    await updateMutation.mutateAsync({ 
+      endpoint: `/other-treatments/${updatedData.id}`,
+      data: updatedData,
+      queryKey: 'patient-previous-other-treatments'
+    })
+  }
+
+  const handleDeleteOtherTreatment = async (treatmentId) => {
+    await deleteMutation.mutateAsync({ 
+      endpoint: `/other-treatments/${treatmentId}`,
+      queryKey: 'patient-previous-other-treatments'
+    })
+  }
 
   if (patientError) {
     return (
@@ -387,7 +331,9 @@ export default function PatientDetailPage() {
 
       {/* Tabs */}
       <div className="px-4">
-        <Tabs defaultValue="demographics" className="space-y-4">
+        <Tabs defaultValue="demographics" className="space-y-4" onValueChange={(value) => {
+          // Could add analytics or state tracking here if needed
+        }}>
           <TabsList className="grid w-full grid-cols-5 h-12">
             <TabsTrigger value="demographics" className="text-sm">Demographics</TabsTrigger>
             <TabsTrigger value="history" className="text-sm">History</TabsTrigger>
@@ -407,45 +353,50 @@ export default function PatientDetailPage() {
 
           {/* History Tab */}
           <TabsContent value="history">
-            <HistorySection
-              histories={histories}
-              chemotherapy={chemotherapy}
-              radiotherapy={radiotherapy}
-              surgeries={surgeries}
-              otherTreatments={[]}
-              baselines={baselines}
-              followups={[]}
-              historyHandlers={{
-                onCreate: handleCreateHistory,
-                onUpdate: handleUpdateHistory,
-                onDelete: handleDeleteHistory
+            <EMRClinicalSections
+              patientId={patientId}
+              patient={patient}
+              allMedicalData={{
+                histories,
+                surgeries,
+                medications,
+                chemotherapy,
+                radiotherapy,
+                other_treatments: otherTreatments
               }}
-              treatmentHandlers={{
-                onCreateChemotherapy: handleCreateChemotherapy,
-                onUpdateChemotherapy: handleUpdateChemotherapy,
-                onDeleteChemotherapy: handleDeleteChemotherapy,
-                onCreateRadiotherapy: handleCreateRadiotherapy,
-                onUpdateRadiotherapy: handleUpdateRadiotherapy,
-                onDeleteRadiotherapy: handleDeleteRadiotherapy,
-                onCreateSurgery: handleCreateSurgery,
-                onUpdateSurgery: handleUpdateSurgery,
-                onDeleteSurgery: handleDeleteSurgery
-              }}
-              isLoading={historiesLoading || chemoLoading || radioLoading || surgeriesLoading}
+              onCreateHistory={handleCreateHistory}
+              onUpdateHistory={handleUpdateHistory}
+              onDeleteHistory={handleDeleteHistory}
+              onCreateSurgery={handleCreateSurgery}
+              onUpdateSurgery={handleUpdateSurgery}
+              onDeleteSurgery={handleDeleteSurgery}
+              onCreateMedication={handleCreateMedication}
+              onUpdateMedication={handleUpdateMedication}
+              onDeleteMedication={handleDeleteMedication}
+              onCreateChemotherapy={handleCreateChemotherapy}
+              onUpdateChemotherapy={handleUpdateChemotherapy}
+              onDeleteChemotherapy={handleDeleteChemotherapy}
+              onCreateRadiotherapy={handleCreateRadiotherapy}
+              onUpdateRadiotherapy={handleUpdateRadiotherapy}
+              onDeleteRadiotherapy={handleDeleteRadiotherapy}
+              onCreateOtherTreatment={handleCreateOtherTreatment}
+              onUpdateOtherTreatment={handleUpdateOtherTreatment}
+              onDeleteOtherTreatment={handleDeleteOtherTreatment}
+              isLoading={historiesLoading || surgeriesLoading || medicationsLoading || chemotherapyLoading || radiotherapyLoading || otherTreatmentsLoading}
             />
           </TabsContent>
 
-          {/* Medications Tab */}
+          {/* Medications Tab - Now integrated in History */}
           <TabsContent value="medications">
-            <MedicationsSection
-              medications={medications}
-              medicationHandlers={{
-                onCreate: handleCreateMedication,
-                onUpdate: handleUpdateMedication,
-                onDelete: handleDeleteMedication
-              }}
-              isLoading={medicationsLoading}
-            />
+            <div className="text-center py-8">
+              <h3 className="text-lg font-medium mb-2">Medications Management</h3>
+              <p className="text-gray-600 mb-4">
+                Medication management is now integrated into the <strong>History</strong> tab for a comprehensive medical overview.
+              </p>
+              <p className="text-sm text-blue-600">
+                Please use the History tab to manage patient medications, surgeries, and medical history.
+              </p>
+            </div>
           </TabsContent>
 
           {/* Baselines Tab */}

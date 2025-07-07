@@ -263,6 +263,7 @@ class Patient(BaseModel):
     referring_physician_email: Optional[str] = None
     third_party_payer: Optional[str] = None
     medical_ref_number: Optional[str] = None
+    clinical_notes: Optional[str] = None
     created_at: Optional[datetime] = None
 
 class PatientCreate(BaseModel):
@@ -290,6 +291,7 @@ class PatientCreate(BaseModel):
     referring_physician_email: Optional[str] = None
     third_party_payer: Optional[str] = None
     medical_ref_number: Optional[str] = None
+    clinical_notes: Optional[str] = None
 
 class PatientSearch(BaseModel):
     first_name: Optional[str] = None
@@ -452,6 +454,8 @@ async def create_patient(patient_data: PatientCreate) -> Patient:
             patient_record["third_party_payer"] = patient_data.third_party_payer.strip()
         if patient_data.medical_ref_number:
             patient_record["medical_ref_number"] = patient_data.medical_ref_number.strip()
+        if patient_data.clinical_notes:
+            patient_record["clinical_notes"] = patient_data.clinical_notes.strip()
         
         response = supabase.table("patients").insert(patient_record).execute()
         logger.info(f"Created patient with ID: {patient_id}")
@@ -798,7 +802,7 @@ async def update_patient_field(patient_id: str, field_data: dict):
             'email', 'address', 'occupation', 'education', 'smoking', 'country_of_birth',
             'city_of_birth', 'file_reference', 'case_number', 'referring_physician_name',
             'referring_physician_phone_1', 'referring_physician_email', 'third_party_payer',
-            'medical_ref_number', 'phone'
+            'medical_ref_number', 'phone', 'clinical_notes'
         }
         
         for field, value in field_data.items():
@@ -1073,46 +1077,355 @@ async def delete_baseline_tumor(tumor_id: str):
 
 @app.get("/patients/{patient_id}/complete")
 async def get_patient_complete_data(patient_id: str):
-    """Get complete patient data including all related information."""
+    """Get complete patient data including all related records."""
     try:
-        # Get basic patient info
+        # Get patient data
         patient_response = supabase.table("patients").select("*").eq("id", patient_id).execute()
         if not patient_response.data:
             raise HTTPException(status_code=404, detail="Patient not found")
         
         patient = patient_response.data[0]
         
-        # Get all related data in parallel
-        histories_response = supabase.table("patient_histories").select("*").eq("patient_id", patient_id).execute()
-        chemo_response = supabase.table("patient_previous_chemotherapy").select("*").eq("patient_id", patient_id).execute()
-        radio_response = supabase.table("patient_previous_radiotherapy").select("*").eq("patient_id", patient_id).execute()
-        surgeries_response = supabase.table("patient_previous_surgeries").select("*").eq("patient_id", patient_id).execute()
-        other_treatments_response = supabase.table("patient_previous_other_treatments").select("*").eq("patient_id", patient_id).execute()
-        medications_response = supabase.table("patient_concomitant_medications").select("*").eq("patient_id", patient_id).execute()
-        baselines_response = supabase.table("patient_baselines").select("*").eq("patient_id", patient_id).execute()
+        # Get all related data
+        histories = supabase.table("patient_histories").select("*").eq("patient_id", patient_id).execute()
+        chemotherapy = supabase.table("patient_previous_chemotherapy").select("*").eq("patient_id", patient_id).execute()
+        radiotherapy = supabase.table("patient_previous_radiotherapy").select("*").eq("patient_id", patient_id).execute()
+        surgeries = supabase.table("patient_previous_surgeries").select("*").eq("patient_id", patient_id).execute()
+        other_treatments = supabase.table("patient_previous_other_treatments").select("*").eq("patient_id", patient_id).execute()
+        medications = supabase.table("patient_concomitant_medications").select("*").eq("patient_id", patient_id).execute()
+        baselines = supabase.table("patient_baselines").select("*").eq("patient_id", patient_id).execute()
+        recordings = supabase.table("recordings").select("*").eq("patient_id", patient_id).execute()
         
-        # Compile complete data
-        complete_data = {
-            **patient,
-            "histories": histories_response.data,
-            "previous_chemotherapy": chemo_response.data,
-            "previous_radiotherapy": radio_response.data,
-            "previous_surgeries": surgeries_response.data,
-            "previous_other_treatments": other_treatments_response.data,
-            "concomitant_medications": medications_response.data,
-            "baselines": baselines_response.data
+        return {
+            "patient": patient,
+            "histories": histories.data,
+            "chemotherapy": chemotherapy.data,
+            "radiotherapy": radiotherapy.data,
+            "surgeries": surgeries.data,
+            "other_treatments": other_treatments.data,
+            "medications": medications.data,
+            "baselines": baselines.data,
+            "recordings": recordings.data
         }
-        
-        return complete_data
-        
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Failed to fetch complete patient data: {str(e)}")
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Failed to fetch complete patient data: {str(e)}"
-        )
+        logger.error(f"Error getting complete patient data: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get complete patient data")
+
+# CRUD endpoints for patient histories
+@app.post("/patients/{patient_id}/histories")
+async def create_patient_history(patient_id: str, history_data: dict):
+    """Create a new patient history record."""
+    try:
+        # Add patient_id to the data
+        history_data["patient_id"] = patient_id
+        
+        response = supabase.table("patient_histories").insert(history_data).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to create history record")
+        
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error creating patient history: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create history record")
+
+@app.patch("/histories/{history_id}")
+async def update_patient_history(history_id: str, history_data: dict):
+    """Update a patient history record."""
+    try:
+        response = supabase.table("patient_histories").update(history_data).eq("id", history_id).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="History record not found")
+        
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error updating patient history: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update history record")
+
+@app.delete("/histories/{history_id}")
+async def delete_patient_history(history_id: str):
+    """Delete a patient history record."""
+    try:
+        response = supabase.table("patient_histories").delete().eq("id", history_id).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="History record not found")
+        
+        return {"message": "History record deleted successfully"}
+    except Exception as e:
+        logger.error(f"Error deleting patient history: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete history record")
+
+# CRUD endpoints for patient previous chemotherapy
+@app.post("/patients/{patient_id}/previous-chemotherapy")
+async def create_patient_chemotherapy(patient_id: str, chemo_data: dict):
+    """Create a new patient chemotherapy record."""
+    try:
+        chemo_data["patient_id"] = patient_id
+        
+        response = supabase.table("patient_previous_chemotherapy").insert(chemo_data).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to create chemotherapy record")
+        
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error creating patient chemotherapy: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create chemotherapy record")
+
+@app.patch("/chemotherapy/{chemo_id}")
+async def update_patient_chemotherapy(chemo_id: str, chemo_data: dict):
+    """Update a patient chemotherapy record."""
+    try:
+        response = supabase.table("patient_previous_chemotherapy").update(chemo_data).eq("id", chemo_id).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Chemotherapy record not found")
+        
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error updating patient chemotherapy: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update chemotherapy record")
+
+@app.delete("/chemotherapy/{chemo_id}")
+async def delete_patient_chemotherapy(chemo_id: str):
+    """Delete a patient chemotherapy record."""
+    try:
+        response = supabase.table("patient_previous_chemotherapy").delete().eq("id", chemo_id).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Chemotherapy record not found")
+        
+        return {"message": "Chemotherapy record deleted successfully"}
+    except Exception as e:
+        logger.error(f"Error deleting patient chemotherapy: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete chemotherapy record")
+
+# CRUD endpoints for patient previous radiotherapy
+@app.post("/patients/{patient_id}/previous-radiotherapy")
+async def create_patient_radiotherapy(patient_id: str, radio_data: dict):
+    """Create a new patient radiotherapy record."""
+    try:
+        radio_data["patient_id"] = patient_id
+        
+        response = supabase.table("patient_previous_radiotherapy").insert(radio_data).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to create radiotherapy record")
+        
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error creating patient radiotherapy: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create radiotherapy record")
+
+@app.patch("/radiotherapy/{radio_id}")
+async def update_patient_radiotherapy(radio_id: str, radio_data: dict):
+    """Update a patient radiotherapy record."""
+    try:
+        response = supabase.table("patient_previous_radiotherapy").update(radio_data).eq("id", radio_id).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Radiotherapy record not found")
+        
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error updating patient radiotherapy: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update radiotherapy record")
+
+@app.delete("/radiotherapy/{radio_id}")
+async def delete_patient_radiotherapy(radio_id: str):
+    """Delete a patient radiotherapy record."""
+    try:
+        response = supabase.table("patient_previous_radiotherapy").delete().eq("id", radio_id).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Radiotherapy record not found")
+        
+        return {"message": "Radiotherapy record deleted successfully"}
+    except Exception as e:
+        logger.error(f"Error deleting patient radiotherapy: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete radiotherapy record")
+
+# CRUD endpoints for patient previous surgeries
+@app.post("/patients/{patient_id}/previous-surgeries")
+async def create_patient_surgery(patient_id: str, surgery_data: dict):
+    """Create a new patient surgery record."""
+    try:
+        surgery_data["patient_id"] = patient_id
+        
+        response = supabase.table("patient_previous_surgeries").insert(surgery_data).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to create surgery record")
+        
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error creating patient surgery: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create surgery record")
+
+@app.patch("/surgeries/{surgery_id}")
+async def update_patient_surgery(surgery_id: str, surgery_data: dict):
+    """Update a patient surgery record."""
+    try:
+        response = supabase.table("patient_previous_surgeries").update(surgery_data).eq("id", surgery_id).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Surgery record not found")
+        
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error updating patient surgery: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update surgery record")
+
+@app.delete("/surgeries/{surgery_id}")
+async def delete_patient_surgery(surgery_id: str):
+    """Delete a patient surgery record."""
+    try:
+        response = supabase.table("patient_previous_surgeries").delete().eq("id", surgery_id).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Surgery record not found")
+        
+        return {"message": "Surgery record deleted successfully"}
+    except Exception as e:
+        logger.error(f"Error deleting patient surgery: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete surgery record")
+
+# CRUD endpoints for patient previous other treatments
+@app.post("/patients/{patient_id}/previous-other-treatments")
+async def create_patient_other_treatment(patient_id: str, treatment_data: dict):
+    """Create a new patient other treatment record."""
+    try:
+        treatment_data["patient_id"] = patient_id
+        
+        response = supabase.table("patient_previous_other_treatments").insert(treatment_data).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to create other treatment record")
+        
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error creating patient other treatment: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create other treatment record")
+
+@app.patch("/other-treatments/{treatment_id}")
+async def update_patient_other_treatment(treatment_id: str, treatment_data: dict):
+    """Update a patient other treatment record."""
+    try:
+        response = supabase.table("patient_previous_other_treatments").update(treatment_data).eq("id", treatment_id).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Other treatment record not found")
+        
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error updating patient other treatment: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update other treatment record")
+
+@app.delete("/other-treatments/{treatment_id}")
+async def delete_patient_other_treatment(treatment_id: str):
+    """Delete a patient other treatment record."""
+    try:
+        response = supabase.table("patient_previous_other_treatments").delete().eq("id", treatment_id).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Other treatment record not found")
+        
+        return {"message": "Other treatment record deleted successfully"}
+    except Exception as e:
+        logger.error(f"Error deleting patient other treatment: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete other treatment record")
+
+# CRUD endpoints for patient concomitant medications
+@app.post("/patients/{patient_id}/concomitant-medications")
+async def create_patient_medication(patient_id: str, medication_data: dict):
+    """Create a new patient medication record."""
+    try:
+        medication_data["patient_id"] = patient_id
+        
+        response = supabase.table("patient_concomitant_medications").insert(medication_data).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to create medication record")
+        
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error creating patient medication: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create medication record")
+
+@app.patch("/medications/{medication_id}")
+async def update_patient_medication(medication_id: str, medication_data: dict):
+    """Update a patient medication record."""
+    try:
+        response = supabase.table("patient_concomitant_medications").update(medication_data).eq("id", medication_id).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Medication record not found")
+        
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error updating patient medication: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update medication record")
+
+@app.delete("/medications/{medication_id}")
+async def delete_patient_medication(medication_id: str):
+    """Delete a patient medication record."""
+    try:
+        response = supabase.table("patient_concomitant_medications").delete().eq("id", medication_id).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Medication record not found")
+        
+        return {"message": "Medication record deleted successfully"}
+    except Exception as e:
+        logger.error(f"Error deleting patient medication: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete medication record")
+
+# CRUD endpoints for patient baselines
+@app.post("/patients/{patient_id}/baselines")
+async def create_patient_baseline(patient_id: str, baseline_data: dict):
+    """Create a new patient baseline record."""
+    try:
+        baseline_data["patient_id"] = patient_id
+        
+        response = supabase.table("patient_baselines").insert(baseline_data).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to create baseline record")
+        
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error creating patient baseline: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create baseline record")
+
+@app.patch("/baselines/{baseline_id}")
+async def update_patient_baseline(baseline_id: str, baseline_data: dict):
+    """Update a patient baseline record."""
+    try:
+        response = supabase.table("patient_baselines").update(baseline_data).eq("id", baseline_id).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Baseline record not found")
+        
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error updating patient baseline: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update baseline record")
+
+@app.delete("/baselines/{baseline_id}")
+async def delete_patient_baseline(baseline_id: str):
+    """Delete a patient baseline record."""
+    try:
+        response = supabase.table("patient_baselines").delete().eq("id", baseline_id).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Baseline record not found")
+        
+        return {"message": "Baseline record deleted successfully"}
+    except Exception as e:
+        logger.error(f"Error deleting patient baseline: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete baseline record")
 
 if __name__ == "__main__":
     import uvicorn

@@ -1,0 +1,200 @@
+table_name,column_name,data_type
+audit_logs,id,uuid
+audit_logs,patient_id,uuid
+audit_logs,table_name,character varying
+audit_logs,record_id,uuid
+audit_logs,action,character varying
+audit_logs,old_values,jsonb
+audit_logs,new_values,jsonb
+audit_logs,user_id,character varying
+audit_logs,user_email,character varying
+audit_logs,created_at,timestamp with time zone
+baseline_tumors,id,uuid
+baseline_tumors,baseline_id,uuid
+baseline_tumors,site,character varying
+baseline_tumors,size,numeric
+baseline_tumors,description,text
+baseline_tumors,histology,character varying
+baseline_tumors,grade,character varying
+baseline_tumors,stage,character varying
+baseline_tumors,tnm_t,character varying
+baseline_tumors,tnm_n,character varying
+baseline_tumors,tnm_m,character varying
+baseline_tumors,notes,text
+baseline_tumors,created_at,timestamp with time zone
+baseline_tumors,updated_at,timestamp with time zone
+patient_baselines,id,uuid
+patient_baselines,patient_id,uuid
+patient_baselines,baseline_date,date
+patient_baselines,weight,numeric
+patient_baselines,height,numeric
+patient_baselines,bmi,numeric
+patient_baselines,ecog_performance_status,integer
+patient_baselines,vital_signs,text
+patient_baselines,physical_examination,text
+patient_baselines,notes,text
+patient_baselines,created_at,timestamp with time zone
+patient_baselines,updated_at,timestamp with time zone
+patient_concomitant_medications,id,uuid
+patient_concomitant_medications,patient_id,uuid
+patient_concomitant_medications,name,character varying
+patient_concomitant_medications,dose,character varying
+patient_concomitant_medications,frequency,character varying
+patient_concomitant_medications,route,character varying
+patient_concomitant_medications,start_date,date
+patient_concomitant_medications,end_date,date
+patient_concomitant_medications,indication,text
+patient_concomitant_medications,prescribing_physician,character varying
+patient_concomitant_medications,notes,text
+patient_concomitant_medications,created_at,timestamp with time zone
+patient_concomitant_medications,updated_at,timestamp with time zone
+patient_followups,id,uuid
+patient_followups,patient_id,uuid
+patient_followups,followup_date,date
+patient_followups,weight,numeric
+patient_followups,ecog_performance_status,integer
+patient_followups,disease_status,character varying
+patient_followups,symptoms,text
+patient_followups,side_effects,text
+patient_followups,physical_examination,text
+patient_followups,plan,text
+patient_followups,next_followup_date,date
+patient_followups,notes,text
+patient_followups,created_at,timestamp with time zone
+patient_followups,updated_at,timestamp with time zone
+patient_histories,id,uuid
+patient_histories,patient_id,uuid
+patient_histories,history_type,character varying
+patient_histories,description,text
+patient_histories,onset_date,date
+patient_histories,severity,character varying
+patient_histories,notes,text
+patient_histories,created_at,timestamp with time zone
+patient_histories,updated_at,timestamp with time zone
+patient_histories,packs_per_day,numeric
+patient_histories,years_smoked,integer
+patient_histories,pack_years,numeric
+patient_imaging_studies,id,uuid
+patient_imaging_studies,patient_id,uuid
+patient_imaging_studies,study_date,date
+patient_imaging_studies,study_type,character varying
+patient_imaging_studies,body_part,character varying
+patient_imaging_studies,contrast_used,boolean
+patient_imaging_studies,findings,text
+patient_imaging_studies,impression,text
+patient_imaging_studies,radiologist,character varying
+patient_imaging_studies,facility,character varying
+patient_imaging_studies,notes,text
+patient_imaging_studies,created_at,timestamp with time zone
+patient_imaging_studies,updated_at,timestamp with time zone
+patient_lab_results,id,uuid
+patient_lab_results,patient_id,uuid
+patient_lab_results,test_date,date
+patient_lab_results,test_name,character varying
+patient_lab_results,test_category,character varying
+patient_lab_results,result_value,character varying
+patient_lab_results,result_unit,character varying
+patient_lab_results,reference_range,character varying
+patient_lab_results,result_status,character varying
+patient_lab_results,lab_facility,character varying
+patient_lab_results,notes,text
+patient_lab_results,created_at,timestamp with time zone
+patient_lab_results,updated_at,timestamp with time zone
+patient_molecular_tests,id,uuid
+patient_molecular_tests,patient_id,uuid
+patient_molecular_tests,test_date,date
+patient_molecular_tests,test_name,character varying
+patient_molecular_tests,test_type,character varying
+patient_molecular_tests,specimen_type,character varying
+patient_molecular_tests,specimen_site,character varying
+patient_molecular_tests,gene_tested,character varying
+patient_molecular_tests,result,text
+patient_molecular_tests,result_interpretation,character varying
+patient_molecular_tests,percentage_positive,numeric
+patient_molecular_tests,lab_facility,character varying
+patient_molecular_tests,pathologist,character varying
+patient_molecular_tests,notes,text
+patient_molecular_tests,created_at,timestamp with time zone
+patient_molecular_tests,updated_at,timestamp with time zone
+patient_previous_chemotherapy,id,uuid
+patient_previous_chemotherapy,patient_id,uuid
+patient_previous_chemotherapy,drug_name,character varying
+patient_previous_chemotherapy,dose,character varying
+patient_previous_chemotherapy,frequency,character varying
+patient_previous_chemotherapy,start_date,date
+patient_previous_chemotherapy,end_date,date
+patient_previous_chemotherapy,cycles,integer
+patient_previous_chemotherapy,indication,text
+patient_previous_chemotherapy,response,character varying
+patient_previous_chemotherapy,side_effects,text
+patient_previous_chemotherapy,notes,text
+patient_previous_chemotherapy,created_at,timestamp with time zone
+patient_previous_chemotherapy,updated_at,timestamp with time zone
+patient_previous_other_treatments,id,uuid
+patient_previous_other_treatments,patient_id,uuid
+patient_previous_other_treatments,treatment_type,character varying
+patient_previous_other_treatments,description,text
+patient_previous_other_treatments,start_date,date
+patient_previous_other_treatments,end_date,date
+patient_previous_other_treatments,indication,text
+patient_previous_other_treatments,response,character varying
+patient_previous_other_treatments,side_effects,text
+patient_previous_other_treatments,notes,text
+patient_previous_other_treatments,created_at,timestamp with time zone
+patient_previous_other_treatments,updated_at,timestamp with time zone
+patient_previous_radiotherapy,id,uuid
+patient_previous_radiotherapy,patient_id,uuid
+patient_previous_radiotherapy,site,character varying
+patient_previous_radiotherapy,dose,numeric
+patient_previous_radiotherapy,fractions,integer
+patient_previous_radiotherapy,technique,character varying
+patient_previous_radiotherapy,start_date,date
+patient_previous_radiotherapy,end_date,date
+patient_previous_radiotherapy,indication,text
+patient_previous_radiotherapy,response,character varying
+patient_previous_radiotherapy,side_effects,text
+patient_previous_radiotherapy,notes,text
+patient_previous_radiotherapy,created_at,timestamp with time zone
+patient_previous_radiotherapy,updated_at,timestamp with time zone
+patient_previous_surgeries,id,uuid
+patient_previous_surgeries,patient_id,uuid
+patient_previous_surgeries,procedure,character varying
+patient_previous_surgeries,surgeon,character varying
+patient_previous_surgeries,date,date
+patient_previous_surgeries,indication,text
+patient_previous_surgeries,outcome,character varying
+patient_previous_surgeries,complications,text
+patient_previous_surgeries,pathology,text
+patient_previous_surgeries,notes,text
+patient_previous_surgeries,created_at,timestamp with time zone
+patient_previous_surgeries,updated_at,timestamp with time zone
+patients,id,uuid
+patients,first_name,character varying
+patients,last_name,character varying
+patients,father_name,character varying
+patients,mother_name,character varying
+patients,date_of_birth,date
+patients,gender,character varying
+patients,marital_status,character varying
+patients,phone_1,character varying
+patients,phone_2,character varying
+patients,email,character varying
+patients,address,text
+patients,country_of_birth,character varying
+patients,city_of_birth,character varying
+patients,occupation,character varying
+patients,file_reference,character varying
+patients,case_number,character varying
+patients,referring_physician_name,character varying
+patients,referring_physician_phone_1,character varying
+patients,created_at,timestamp with time zone
+patients,updated_at,timestamp with time zone
+recordings,id,uuid
+recordings,patient_id,uuid
+recordings,filename,character varying
+recordings,transcript,text
+recordings,duration_seconds,integer
+recordings,file_size_bytes,bigint
+recordings,created_at,timestamp with time zone
+recordings,updated_at,timestamp with time zone
+recordings,summary,text

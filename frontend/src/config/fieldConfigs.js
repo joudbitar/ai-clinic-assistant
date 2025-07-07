@@ -526,3 +526,637 @@ export const getSmokingRiskLevel = (packYears) => {
     return { level: "Heavy", color: "bg-orange-100 text-orange-800" };
   return { level: "Very Heavy", color: "bg-red-100 text-red-800" };
 };
+
+// Enhanced field configurations for Medical History Section
+
+// Risk Factors - Smoking History (using actual patient_histories table structure)
+export const smokingHistoryFields = [
+  {
+    key: "history_type",
+    label: "History Type",
+    type: "hidden",
+    default: "smoking",
+  },
+  {
+    key: "description",
+    label: "Smoking Details",
+    type: "textarea",
+    required: true,
+    placeholder:
+      "Current/former smoker, type of cigarettes, attempts to quit, etc.",
+  },
+  {
+    key: "packs_per_day",
+    label: "Packs per Day",
+    type: "number",
+    step: "0.1",
+    min: "0",
+    placeholder: "e.g., 1.5",
+  },
+  {
+    key: "years_smoked",
+    label: "Years Smoked",
+    type: "number",
+    min: "0",
+    placeholder: "e.g., 15",
+  },
+  {
+    key: "pack_years",
+    label: "Pack Years",
+    type: "number",
+    step: "0.1",
+    readonly: true,
+    calculated: true,
+  },
+  {
+    key: "onset_date",
+    label: "Started Smoking",
+    type: "date",
+  },
+  {
+    key: "severity",
+    label: "Severity",
+    type: "select",
+    options: [
+      { value: "mild", label: "Light smoker" },
+      { value: "moderate", label: "Moderate smoker" },
+      { value: "severe", label: "Heavy smoker" },
+    ],
+  },
+  { key: "notes", label: "Notes", type: "textarea" },
+];
+
+// Risk Factors - Alcohol History (using actual patient_histories table structure)
+export const alcoholHistoryFields = [
+  {
+    key: "history_type",
+    label: "History Type",
+    type: "hidden",
+    default: "alcohol",
+  },
+  {
+    key: "description",
+    label: "Alcohol Use Details",
+    type: "textarea",
+    required: true,
+    placeholder: "Current/former drinker, frequency, type of alcohol, etc.",
+  },
+  {
+    key: "onset_date",
+    label: "Started Drinking",
+    type: "date",
+  },
+  {
+    key: "severity",
+    label: "Severity",
+    type: "select",
+    options: [
+      { value: "mild", label: "Social drinker" },
+      { value: "moderate", label: "Moderate drinker" },
+      { value: "severe", label: "Heavy drinker" },
+    ],
+  },
+  { key: "notes", label: "Notes", type: "textarea" },
+];
+
+// Risk Factors - Family History (using actual patient_histories table structure)
+export const familyHistoryFields = [
+  {
+    key: "history_type",
+    label: "History Type",
+    type: "hidden",
+    default: "family",
+  },
+  {
+    key: "description",
+    label: "Family Medical History",
+    type: "textarea",
+    required: true,
+    placeholder: "Family member, condition, age at diagnosis, etc.",
+  },
+  {
+    key: "onset_date",
+    label: "Date of Diagnosis",
+    type: "date",
+  },
+  {
+    key: "severity",
+    label: "Severity",
+    type: "select",
+    options: [
+      { value: "mild", label: "Mild" },
+      { value: "moderate", label: "Moderate" },
+      { value: "severe", label: "Severe" },
+    ],
+  },
+  { key: "notes", label: "Notes", type: "textarea" },
+];
+
+// Clinical Description Fields (using actual patient_histories table structure)
+export const clinicalDescriptionFields = [
+  {
+    key: "history_type",
+    label: "History Type",
+    type: "select",
+    required: true,
+    options: [
+      { value: "medical", label: "Medical History" },
+      { value: "allergy", label: "Allergies" },
+      { value: "social", label: "Social History" },
+      { value: "occupational", label: "Occupational History" },
+      { value: "other", label: "Other" },
+    ],
+  },
+  {
+    key: "description",
+    label: "Description",
+    type: "textarea",
+    required: true,
+    placeholder: "Provide detailed description...",
+  },
+  { key: "onset_date", label: "Onset Date", type: "date" },
+  {
+    key: "severity",
+    label: "Severity",
+    type: "select",
+    options: [
+      { value: "mild", label: "Mild" },
+      { value: "moderate", label: "Moderate" },
+      { value: "severe", label: "Severe" },
+    ],
+  },
+  { key: "notes", label: "Notes", type: "textarea" },
+];
+
+// Common medications list for autocomplete
+export const commonMedications = [
+  "Acetaminophen",
+  "Advil",
+  "Aleve",
+  "Aspirin",
+  "Atorvastatin",
+  "Amlodipine",
+  "Metformin",
+  "Lisinopril",
+  "Levothyroxine",
+  "Metoprolol",
+  "Omeprazole",
+  "Simvastatin",
+  "Losartan",
+  "Hydrochlorothiazide",
+  "Gabapentin",
+  "Prednisone",
+  "Insulin",
+  "Warfarin",
+  "Clopidogrel",
+  "Furosemide",
+  "Sertraline",
+  "Escitalopram",
+  "Tramadol",
+  "Oxycodone",
+  "Morphine",
+  "Fentanyl",
+  "Ondansetron",
+  "Lorazepam",
+  "Cyclobenzaprine",
+  "Pantoprazole",
+  "Ranitidine",
+  "Ciprofloxacin",
+  "Azithromycin",
+  "Amoxicillin",
+  "Doxycycline",
+  "Prednisolone",
+  "Methylprednisolone",
+  // Cancer-specific medications
+  "Carboplatin",
+  "Cisplatin",
+  "Oxaliplatin",
+  "Paclitaxel",
+  "Docetaxel",
+  "Doxorubicin",
+  "Cyclophosphamide",
+  "5-Fluorouracil",
+  "Gemcitabine",
+  "Bevacizumab",
+  "Trastuzumab",
+  "Rituximab",
+  "Pembrolizumab",
+  "Nivolumab",
+  "Ipilimumab",
+  "Atezolizumab",
+  "Durvalumab",
+  "Cetuximab",
+  "Panitumumab",
+];
+
+// Enhanced medication fields (using actual patient_concomitant_medications table structure)
+export const enhancedMedicationFields = [
+  {
+    key: "name",
+    label: "Medication Name",
+    type: "text",
+    required: true,
+    autocomplete: commonMedications,
+    placeholder: "Start typing medication name...",
+  },
+  {
+    key: "dose",
+    label: "Dose",
+    type: "text",
+    placeholder: "e.g., 500mg, 10 units",
+  },
+  {
+    key: "frequency",
+    label: "Frequency",
+    type: "text",
+    placeholder: "e.g., twice daily, as needed",
+  },
+  {
+    key: "route",
+    label: "Route",
+    type: "text",
+    placeholder: "e.g., oral, IV, IM",
+  },
+  { key: "start_date", label: "Start Date", type: "date" },
+  { key: "end_date", label: "End Date", type: "date" },
+  {
+    key: "indication",
+    label: "Indication",
+    type: "text",
+    placeholder: "What is this medication for?",
+  },
+  {
+    key: "prescribing_physician",
+    label: "Prescribing Physician",
+    type: "text",
+  },
+  { key: "notes", label: "Notes", type: "textarea" },
+];
+
+// Surgery procedure suggestions for autocomplete
+export const commonSurgeries = [
+  "Appendectomy",
+  "Cholecystectomy",
+  "Mastectomy",
+  "Lumpectomy",
+  "Hysterectomy",
+  "Cesarean Section",
+  "Hernia Repair",
+  "Knee Replacement",
+  "Hip Replacement",
+  "Coronary Artery Bypass",
+  "Angioplasty",
+  "Cataract Surgery",
+  "Tonsillectomy",
+  "Gallbladder Surgery",
+  "Colon Resection",
+  "Liver Resection",
+  "Lung Resection",
+  "Nephrectomy",
+  "Prostatectomy",
+  "Thyroidectomy",
+  "Splenectomy",
+  "Pancreatectomy",
+  "Esophagectomy",
+  "Gastrectomy",
+  "Colectomy",
+  "Sigmoid Resection",
+  "Right Hemicolectomy",
+  "Left Hemicolectomy",
+  "Low Anterior Resection",
+  "Abdominoperineal Resection",
+  "Whipple Procedure",
+  "Hepatectomy",
+  "Lobectomy",
+  "Pneumonectomy",
+  "Thoracotomy",
+  "Craniotomy",
+  "Laminectomy",
+  "Arthroscopy",
+  "ORIF",
+  "Skin Graft",
+  "Biopsy",
+];
+
+// Enhanced surgery fields (using actual patient_previous_surgeries table structure)
+export const enhancedSurgeryFields = [
+  {
+    key: "procedure",
+    label: "Procedure",
+    type: "text",
+    required: true,
+    autocomplete: commonSurgeries,
+    placeholder: "Start typing procedure name...",
+  },
+  {
+    key: "surgeon",
+    label: "Surgeon",
+    type: "text",
+    placeholder: "Dr. Last Name or Full Name",
+  },
+  { key: "date", label: "Date", type: "date" },
+  {
+    key: "indication",
+    label: "Indication",
+    type: "text",
+    placeholder: "Reason for surgery",
+  },
+  {
+    key: "outcome",
+    label: "Outcome",
+    type: "text",
+    placeholder: "e.g., successful, partially successful, unsuccessful",
+  },
+  {
+    key: "complications",
+    label: "Complications",
+    type: "textarea",
+    placeholder: "Any complications during or after surgery",
+  },
+  {
+    key: "pathology",
+    label: "Pathology Results",
+    type: "textarea",
+    placeholder: "Pathology findings if applicable",
+  },
+  { key: "notes", label: "Additional Notes", type: "textarea" },
+];
+
+// Utility functions for medical history
+export const calculateAge = (birthDate) => {
+  if (!birthDate) return null;
+  const today = new Date();
+  const birth = new Date(birthDate);
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age;
+};
+
+export const formatMedicationDisplay = (medication) => {
+  const parts = [];
+  if (medication.name) parts.push(medication.name);
+  if (medication.dose) parts.push(medication.dose);
+  if (medication.frequency) parts.push(medication.frequency.replace(/_/g, " "));
+  if (medication.route) parts.push(`(${medication.route.toUpperCase()})`);
+  return parts.join(" ");
+};
+
+export const getRiskLevel = (type, value) => {
+  switch (type) {
+    case "smoking":
+      if (value < 10)
+        return { level: "Low", color: "bg-green-100 text-green-800" };
+      if (value < 20)
+        return { level: "Moderate", color: "bg-yellow-100 text-yellow-800" };
+      if (value < 30)
+        return { level: "High", color: "bg-orange-100 text-orange-800" };
+      return { level: "Very High", color: "bg-red-100 text-red-800" };
+    case "alcohol":
+      if (value < 7)
+        return { level: "Low", color: "bg-green-100 text-green-800" };
+      if (value < 14)
+        return { level: "Moderate", color: "bg-yellow-100 text-yellow-800" };
+      return { level: "High", color: "bg-red-100 text-red-800" };
+    default:
+      return { level: "Unknown", color: "bg-gray-100 text-gray-800" };
+  }
+};
+
+// Enhanced chemotherapy fields (using actual patient_previous_chemotherapy table structure)
+export const enhancedChemotherapyFields = [
+  {
+    key: "drug_name",
+    label: "Drug Name",
+    type: "text",
+    required: true,
+    placeholder: "e.g., Carboplatin, Paclitaxel",
+  },
+  {
+    key: "dose",
+    label: "Dose",
+    type: "text",
+    placeholder: "e.g., 300mg/m²",
+  },
+  {
+    key: "frequency",
+    label: "Frequency",
+    type: "text",
+    placeholder: "e.g., every 3 weeks",
+  },
+  {
+    key: "start_date",
+    label: "Start Date",
+    type: "date",
+  },
+  {
+    key: "end_date",
+    label: "End Date",
+    type: "date",
+  },
+  {
+    key: "cycles",
+    label: "Number of Cycles",
+    type: "number",
+    min: "1",
+    placeholder: "e.g., 6",
+  },
+  {
+    key: "indication",
+    label: "Indication",
+    type: "text",
+    placeholder: "Reason for chemotherapy",
+  },
+  {
+    key: "response",
+    label: "Response",
+    type: "text",
+    placeholder: "e.g., complete response, partial response, stable disease",
+  },
+  {
+    key: "side_effects",
+    label: "Side Effects",
+    type: "textarea",
+    placeholder: "Any side effects experienced",
+  },
+  { key: "notes", label: "Additional Notes", type: "textarea" },
+];
+
+// Enhanced radiotherapy fields (using actual patient_previous_radiotherapy table structure)
+export const enhancedRadiotherapyFields = [
+  {
+    key: "site",
+    label: "Treatment Site",
+    type: "text",
+    required: true,
+    placeholder: "e.g., chest, pelvis, brain",
+  },
+  {
+    key: "dose",
+    label: "Total Dose (Gy)",
+    type: "number",
+    step: "0.1",
+    placeholder: "e.g., 60",
+  },
+  {
+    key: "fractions",
+    label: "Number of Fractions",
+    type: "number",
+    placeholder: "e.g., 30",
+  },
+  {
+    key: "technique",
+    label: "Technique",
+    type: "text",
+    placeholder: "e.g., IMRT, 3D-CRT, VMAT",
+  },
+  {
+    key: "start_date",
+    label: "Start Date",
+    type: "date",
+  },
+  {
+    key: "end_date",
+    label: "End Date",
+    type: "date",
+  },
+  {
+    key: "indication",
+    label: "Indication",
+    type: "text",
+    placeholder: "Reason for radiotherapy",
+  },
+  {
+    key: "response",
+    label: "Response",
+    type: "text",
+    placeholder: "e.g., complete response, partial response, stable disease",
+  },
+  {
+    key: "side_effects",
+    label: "Side Effects",
+    type: "textarea",
+    placeholder: "Any side effects experienced",
+  },
+  { key: "notes", label: "Additional Notes", type: "textarea" },
+];
+
+// Enhanced other treatments fields (using actual patient_previous_other_treatments table structure)
+export const enhancedOtherTreatmentFields = [
+  {
+    key: "treatment_type",
+    label: "Treatment Type",
+    type: "text",
+    required: true,
+    placeholder: "e.g., immunotherapy, targeted therapy, hormone therapy",
+  },
+  {
+    key: "description",
+    label: "Description",
+    type: "textarea",
+    required: true,
+    placeholder: "Detailed description of the treatment",
+  },
+  {
+    key: "start_date",
+    label: "Start Date",
+    type: "date",
+  },
+  {
+    key: "end_date",
+    label: "End Date",
+    type: "date",
+  },
+  {
+    key: "indication",
+    label: "Indication",
+    type: "text",
+    placeholder: "Reason for treatment",
+  },
+  {
+    key: "response",
+    label: "Response",
+    type: "text",
+    placeholder: "e.g., complete response, partial response, stable disease",
+  },
+  {
+    key: "side_effects",
+    label: "Side Effects",
+    type: "textarea",
+    placeholder: "Any side effects experienced",
+  },
+  { key: "notes", label: "Additional Notes", type: "textarea" },
+];
+
+// Common chemotherapy drugs list for autocomplete
+export const commonChemotherapyDrugs = [
+  "Carboplatin",
+  "Cisplatin",
+  "Oxaliplatin",
+  "Paclitaxel",
+  "Docetaxel",
+  "Nab-paclitaxel",
+  "Doxorubicin",
+  "Epirubicin",
+  "Cyclophosphamide",
+  "5-Fluorouracil",
+  "Capecitabine",
+  "Gemcitabine",
+  "Pemetrexed",
+  "Etoposide",
+  "Topotecan",
+  "Irinotecan",
+  "Methotrexate",
+  "Vincristine",
+  "Vinblastine",
+  "Vinorelbine",
+  "Bleomycin",
+  "Mitomycin C",
+  "Dacarbazine",
+  "Temozolomide",
+  "Lomustine",
+  "Carmustine",
+  "Busulfan",
+  "Melphalan",
+  "Chlorambucil",
+  "Bendamustine",
+];
+
+// Common radiotherapy techniques for autocomplete
+export const commonRadiotherapyTechniques = [
+  "3D Conformal Radiotherapy (3D-CRT)",
+  "Intensity-Modulated Radiotherapy (IMRT)",
+  "Volumetric Modulated Arc Therapy (VMAT)",
+  "Stereotactic Body Radiotherapy (SBRT)",
+  "Stereotactic Radiosurgery (SRS)",
+  "Image-Guided Radiotherapy (IGRT)",
+  "Proton Beam Therapy",
+  "Brachytherapy",
+  "External Beam Radiotherapy (EBRT)",
+  "Tomotherapy",
+  "CyberKnife",
+  "Gamma Knife",
+];
+
+// Common other treatment types for autocomplete
+export const commonOtherTreatments = [
+  "Immunotherapy",
+  "Targeted Therapy",
+  "Hormone Therapy",
+  "Biological Therapy",
+  "Photodynamic Therapy",
+  "Radiofrequency Ablation",
+  "Cryotherapy",
+  "Hyperthermia",
+  "Gene Therapy",
+  "Stem Cell Transplant",
+  "Bone Marrow Transplant",
+  "Palliative Care",
+  "Pain Management",
+  "Nutritional Support",
+  "Physical Therapy",
+];
+
+// Utility functions for medical history
