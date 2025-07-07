@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { 
   Mic, Square, Play, Pause, Volume2, VolumeX, 
   Loader2, CheckCircle, AlertCircle, Clock
@@ -10,6 +10,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 
 export function AudioRecorder({ 
   selectedPatient, 
+  consultationType,
+  onValidationCheck,
   onUploadComplete, 
   onUploadProgress, 
   onUploadStatusChange,
@@ -36,6 +38,15 @@ export function AudioRecorder({
   // Configuration
   const CHUNK_DURATION = 30000 // 30 seconds in milliseconds
   const MAX_RECORDING_TIME = 3600 // 1 hour in seconds
+
+  // Memoize validation result to prevent infinite re-renders
+  const validationError = useMemo(() => {
+    return onValidationCheck ? onValidationCheck() : null
+  }, [onValidationCheck])
+
+  const isRecordingDisabled = useMemo(() => {
+    return validationError !== null || isUploading
+  }, [validationError, isUploading])
   
   useEffect(() => {
     // Request microphone permission on mount
@@ -87,8 +98,9 @@ export function AudioRecorder({
   }
   
   const startRecording = async () => {
-    if (!selectedPatient) {
-      onError('Please select a patient before recording')
+    // Use the validation check from parent component
+    if (validationError) {
+      onError(validationError)
       return
     }
     
@@ -219,8 +231,6 @@ export function AudioRecorder({
     }
   }
   
-
-  
   const uploadFinalRecording = async (finalBlob) => {
     setIsUploading(true)
     onUploadStatusChange('uploading')
@@ -229,9 +239,17 @@ export function AudioRecorder({
       const formData = new FormData()
       const filename = `recording_${Date.now()}.webm`
       formData.append('file', finalBlob, filename)
-      formData.append('patient_id', selectedPatient.id)
       
-      const response = await fetch('http://localhost:8000/upload', {
+      let endpoint = 'http://localhost:8000/upload'
+      
+      if (consultationType === 'existing') {
+        formData.append('patient_id', selectedPatient.id)
+      } else {
+        // For new patients, use the new endpoint
+        endpoint = 'http://localhost:8000/consultation/new_patient'
+      }
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
         body: formData,
       })
@@ -308,7 +326,7 @@ export function AudioRecorder({
             <Button
               size="lg"
               onClick={startRecording}
-              disabled={!selectedPatient || isUploading}
+              disabled={isRecordingDisabled}
               className="h-16 w-16 rounded-full"
             >
               <Mic className="h-8 w-8" />

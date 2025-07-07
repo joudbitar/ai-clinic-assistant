@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -102,7 +102,7 @@ export function CreatePatientDialog({ autoOpen = false, onClose, standalone = fa
         {field.type === 'select' ? (
           <Select 
             value={value} 
-            onValueChange={(value) => updateField(field.key, value)}
+            onChange={(e) => updateField(field.key, e.target.value)}
             disabled={createPatientMutation.isPending}
           >
             <option value="">Select...</option>
@@ -140,29 +140,27 @@ export function CreatePatientDialog({ autoOpen = false, onClose, standalone = fa
     )
   }
 
-  const formContent = (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {standalone && (
-        <div className="flex items-center gap-4 mb-6">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={handleClose}
-            className="p-2"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h2 className="text-2xl font-bold">Add New Patient</h2>
-        </div>
-      )}
-
-      {/* Demographics Section */}
-      <div className="space-y-4">
-        <h3 className="text-lg font-medium">Demographics</h3>
-        <div className="grid gap-4 md:grid-cols-2">
-          {patientFields.demographics.map(renderField)}
-        </div>
-      </div>
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
+          <Plus className="h-4 w-4 mr-2" />
+          Add Patient
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Add New Patient</DialogTitle>
+        </DialogHeader>
+        
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Demographics Section */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium">Demographics</h3>
+            <div className="grid gap-4 md:grid-cols-2">
+              {patientFields.demographics.map(renderField)}
+            </div>
+          </div>
 
       {/* Contact Information */}
       <div className="space-y-4">

@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
   ArrowLeft, Mic, Square, Play, Pause, Upload, FileText, 
   User, Clock, CheckCircle, 
-  AlertCircle, Loader2, Volume2, VolumeX
+  AlertCircle, Loader2, Volume2, VolumeX, UserPlus
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -28,6 +28,7 @@ export default function RecordConsultationPage() {
   const preselectedPatientId = searchParams.get('patientId')
   
   // State management
+  const [consultationType, setConsultationType] = useState('existing') // 'new' or 'existing'
   const [activeTab, setActiveTab] = useState('record')
   const [selectedPatient, setSelectedPatient] = useState(null)
   const [isRecording, setIsRecording] = useState(false)
@@ -77,9 +78,33 @@ export default function RecordConsultationPage() {
     setSelectedPatient(patient)
     setErrorMessage('')
   }
+
+  const handleConsultationTypeChange = useCallback((type) => {
+    setConsultationType(type)
+    setSelectedPatient(null)
+    setErrorMessage('')
+  }, [])
+
+  const validationCheck = useCallback(() => {
+    if (consultationType === 'existing') {
+      return selectedPatient ? null : 'Please select a patient before recording'
+    } else {
+      // For new patients, no validation needed - just record
+      return null
+    }
+  }, [consultationType, selectedPatient])
+
+  const isSubmitDisabled = useMemo(() => {
+    if (consultationType === 'existing') {
+      return !selectedPatient || !manualTranscript.trim() || uploadStatus === 'uploading'
+    } else {
+      // For new patients, only need transcript for manual entry
+      return !manualTranscript.trim() || uploadStatus === 'uploading'
+    }
+  }, [consultationType, selectedPatient, manualTranscript, uploadStatus])
   
   const handleFileUpload = async (file, type) => {
-    if (!selectedPatient) {
+    if (consultationType === 'existing' && !selectedPatient) {
       setErrorMessage('Please select a patient before uploading')
       return
     }
@@ -91,9 +116,17 @@ export default function RecordConsultationPage() {
     try {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('patient_id', selectedPatient.id)
       
-      const response = await fetch('http://localhost:8000/upload', {
+      let endpoint = 'http://localhost:8000/upload'
+      
+      if (consultationType === 'existing') {
+        formData.append('patient_id', selectedPatient.id)
+      } else {
+        // For new patients, use the new endpoint
+        endpoint = 'http://localhost:8000/consultation/new_patient'
+      }
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
         body: formData,
       })
@@ -106,7 +139,11 @@ export default function RecordConsultationPage() {
       setTranscriptionResult(result)
       setUploadStatus('completed')
       
-      toast.success(`${type} uploaded and processed successfully!`)
+      if (consultationType === 'new') {
+        toast.success('New patient created and consultation recorded successfully!')
+      } else {
+        toast.success(`${type} uploaded and processed successfully!`)
+      }
       
       // Navigate to the recording detail page
       setTimeout(() => {
@@ -121,10 +158,8 @@ export default function RecordConsultationPage() {
     }
   }
   
-
-  
   const handleManualTranscriptSubmit = async () => {
-    if (!selectedPatient) {
+    if (consultationType === 'existing' && !selectedPatient) {
       setErrorMessage('Please select a patient before submitting')
       return
     }
@@ -144,9 +179,17 @@ export default function RecordConsultationPage() {
       
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('patient_id', selectedPatient.id)
       
-      const response = await fetch('http://localhost:8000/upload', {
+      let endpoint = 'http://localhost:8000/upload'
+      
+      if (consultationType === 'existing') {
+        formData.append('patient_id', selectedPatient.id)
+      } else {
+        // For new patients, use the new endpoint
+        endpoint = 'http://localhost:8000/consultation/new_patient'
+      }
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
         body: formData,
       })
@@ -159,7 +202,11 @@ export default function RecordConsultationPage() {
       setTranscriptionResult(result)
       setUploadStatus('completed')
       
-      toast.success('Meeting notes submitted successfully!')
+      if (consultationType === 'new') {
+        toast.success('New patient created and meeting notes submitted successfully!')
+      } else {
+        toast.success('Meeting notes submitted successfully!')
+      }
       
       // Navigate to the recording detail page
       setTimeout(() => {
@@ -195,22 +242,111 @@ export default function RecordConsultationPage() {
           Capture and transcribe patient consultations using audio recording or manual meeting notes entry
         </p>
       </div>
-      
-      {/* Patient Selection */}
+
+      {/* Consultation Type Selection */}
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <User className="h-5 w-5" />
-            Patient Selection
-          </CardTitle>
+          <CardTitle>Consultation Type</CardTitle>
         </CardHeader>
         <CardContent>
-          <PatientSelector 
-            selectedPatient={selectedPatient}
-            onPatientSelect={handlePatientSelect}
-          />
+          <div className="flex gap-4">
+            <Button
+              variant={consultationType === 'existing' ? 'default' : 'outline'}
+              onClick={() => handleConsultationTypeChange('existing')}
+              className="flex items-center gap-2"
+            >
+              <User className="h-4 w-4" />
+              Existing Patient
+            </Button>
+            <Button
+              variant={consultationType === 'new' ? 'default' : 'outline'}
+              onClick={() => handleConsultationTypeChange('new')}
+              className="flex items-center gap-2"
+            >
+              <UserPlus className="h-4 w-4" />
+              New Patient
+            </Button>
+          </div>
         </CardContent>
       </Card>
+      
+      {/* Patient Selection/Creation */}
+      {consultationType === 'existing' ? (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <User className="h-5 w-5" />
+              Patient Selection
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <PatientSelector 
+              selectedPatient={selectedPatient}
+              onPatientSelect={handlePatientSelect}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5" />
+              New Patient - AI Inference
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <h4 className="font-semibold text-blue-900 mb-2">✨ Intelligent Patient Information Extraction</h4>
+              <p className="text-sm text-blue-700 mb-2">
+                Our AI will automatically extract patient information from your consultation recording or transcript. 
+                No manual form filling required!
+              </p>
+              <p className="text-sm text-blue-600">
+                Just record your consultation or enter meeting notes, and we'll identify:
+              </p>
+              <ul className="text-sm text-blue-600 mt-2 space-y-1">
+                <li>• Patient name and demographics</li>
+                <li>• Contact information</li>
+                <li>• Medical history and symptoms</li>
+                <li>• Diagnosis and treatment plans</li>
+              </ul>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="manual-transcript">Meeting Notes/Transcript</Label>
+              <Textarea
+                id="manual-transcript"
+                placeholder="Enter meeting notes, consultation transcript, or patient discussion details..."
+                value={manualTranscript}
+                onChange={(e) => setManualTranscript(e.target.value)}
+                rows={10}
+                disabled={uploadStatus === 'uploading'}
+              />
+              <p className="text-sm text-muted-foreground">
+                {manualTranscript.length} characters
+              </p>
+            </div>
+            
+            <Button 
+              onClick={handleManualTranscriptSubmit}
+              disabled={isSubmitDisabled}
+              className="w-full"
+            >
+              {uploadStatus === 'uploading' ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processing & Creating Patient...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Create New Patient & Record Consultation
+                </>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
       
       {/* Error Display */}
       {errorMessage && (
@@ -229,7 +365,7 @@ export default function RecordConsultationPage() {
           </TabsTrigger>
           <TabsTrigger value="manual" className="flex items-center gap-2">
             <FileText className="h-4 w-4" />
-            Meeting Notes/Transcript
+            {consultationType === 'existing' ? 'Meeting Notes/Transcript' : 'Manual Entry (Alternative)'}
           </TabsTrigger>
         </TabsList>
         
@@ -245,10 +381,15 @@ export default function RecordConsultationPage() {
             <CardContent>
               <AudioRecorder
                 selectedPatient={selectedPatient}
+                consultationType={consultationType}
+                onValidationCheck={validationCheck}
                 onUploadComplete={(result) => {
                   setTranscriptionResult(result)
                   setUploadStatus('completed')
-                  toast.success('Recording uploaded and transcribed successfully!')
+                  const message = consultationType === 'new' 
+                    ? 'New patient created and recording uploaded successfully!'
+                    : 'Recording uploaded and transcribed successfully!'
+                  toast.success(message)
                   setTimeout(() => {
                     navigate(`/recordings/${result.id}`)
                   }, 2000)
@@ -264,7 +405,7 @@ export default function RecordConsultationPage() {
           </Card>
         </TabsContent>
         
-                {/* Meeting Notes/Transcript Tab */}
+        {/* Meeting Notes/Transcript Tab */}
         <TabsContent value="manual">
           <Card>
             <CardHeader>
@@ -282,7 +423,7 @@ export default function RecordConsultationPage() {
                   value={manualTranscript}
                   onChange={(e) => setManualTranscript(e.target.value)}
                   rows={10}
-                  disabled={!selectedPatient || uploadStatus === 'uploading'}
+                  disabled={uploadStatus === 'uploading'}
                 />
                 <p className="text-sm text-muted-foreground">
                   {manualTranscript.length} characters
@@ -291,7 +432,7 @@ export default function RecordConsultationPage() {
               
               <Button 
                 onClick={handleManualTranscriptSubmit}
-                disabled={!selectedPatient || !manualTranscript.trim() || uploadStatus === 'uploading'}
+                disabled={isSubmitDisabled}
                 className="w-full"
               >
                 {uploadStatus === 'uploading' ? (
@@ -309,8 +450,6 @@ export default function RecordConsultationPage() {
             </CardContent>
           </Card>
         </TabsContent>
-        
-
       </Tabs>
       
       {/* Upload Status */}
