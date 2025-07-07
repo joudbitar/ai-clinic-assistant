@@ -140,27 +140,15 @@ export function CreatePatientDialog({ autoOpen = false, onClose, standalone = fa
     )
   }
 
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Patient
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Add New Patient</DialogTitle>
-        </DialogHeader>
-        
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Demographics Section */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium">Demographics</h3>
-            <div className="grid gap-4 md:grid-cols-2">
-              {patientFields.demographics.map(renderField)}
-            </div>
-          </div>
+  const formContent = (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Demographics Section */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-medium">Demographics</h3>
+        <div className="grid gap-4 md:grid-cols-2">
+          {patientFields.demographics.map(renderField)}
+        </div>
+      </div>
 
       {/* Contact Information */}
       <div className="space-y-4">
