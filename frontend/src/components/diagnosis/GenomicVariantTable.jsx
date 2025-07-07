@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { DNA, ChevronDown, ChevronRight, ExternalLink, AlertTriangle, CheckCircle2, HelpCircle } from 'lucide-react'
+import { Microscope, ChevronDown, ChevronRight, ExternalLink, AlertTriangle, CheckCircle2, HelpCircle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -138,7 +138,7 @@ export function GenomicVariantTable({ patientId }) {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="text-base font-medium text-cacao flex items-center gap-2">
-              <DNA className="h-4 w-4" />
+              <Microscope className="h-4 w-4" />
               Genomic Variants
             </CardTitle>
             <Button

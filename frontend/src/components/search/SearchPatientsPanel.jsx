@@ -19,14 +19,16 @@ export function SearchPatientsPanel() {
     
     return new Fuse(patients, {
       keys: [
-        { name: 'first_name', weight: 0.3 },
-        { name: 'last_name', weight: 0.3 },
-        { name: 'clinical_status', weight: 0.2 },
-        { name: 'cancer_type', weight: 0.2 }
+        { name: 'first_name', weight: 0.4 },
+        { name: 'last_name', weight: 0.4 },
+        { name: 'clinical_status', weight: 0.1 },
+        { name: 'cancer_type', weight: 0.1 }
       ],
-      threshold: 0.4,
+      threshold: 0.3,
       includeMatches: true,
       includeScore: true,
+      ignoreLocation: true,
+      findAllMatches: true,
     })
   }, [patients])
 

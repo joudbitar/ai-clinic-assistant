@@ -42,10 +42,50 @@ export function PatientCard({ patient, matches = [], query }) {
   const highlightMatches = (text, fieldName) => {
     if (!query || !text) return text
 
+    // For patient names, check both first_name and last_name matches
+    if (fieldName === 'name') {
+      let highlighted = text
+      
+      // Find matches for first_name and last_name
+      const firstNameMatch = matches.find(m => m.key === 'first_name')
+      const lastNameMatch = matches.find(m => m.key === 'last_name')
+      
+      // Apply highlighting for first name matches
+      if (firstNameMatch && patient.first_name) {
+        firstNameMatch.indices.forEach(([start, end]) => {
+          const matchText = patient.first_name.substring(start, end + 1)
+          highlighted = highlighted.replace(
+            new RegExp(`(${escapeRegExp(matchText)})`, 'gi'),
+            '<span class="font-semibold text-burgundy">$1</span>'
+          )
+        })
+      }
+      
+      // Apply highlighting for last name matches
+      if (lastNameMatch && patient.last_name) {
+        lastNameMatch.indices.forEach(([start, end]) => {
+          const matchText = patient.last_name.substring(start, end + 1)
+          highlighted = highlighted.replace(
+            new RegExp(`(${escapeRegExp(matchText)})`, 'gi'),
+            '<span class="font-semibold text-burgundy">$1</span>'
+          )
+        })
+      }
+      
+      // Fallback: simple case-insensitive highlighting if no specific matches
+      if (!firstNameMatch && !lastNameMatch) {
+        const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi')
+        highlighted = highlighted.replace(regex, '<span class="font-semibold text-burgundy">$1</span>')
+      }
+      
+      return highlighted
+    }
+
+    // For other fields, use the original logic
     const match = matches.find(m => m.key === fieldName)
     if (!match) {
       // Fallback: simple case-insensitive highlighting
-      const regex = new RegExp(`(${query})`, 'gi')
+      const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi')
       return text.replace(regex, '<span class="font-semibold text-burgundy">$1</span>')
     }
 
@@ -53,11 +93,16 @@ export function PatientCard({ patient, matches = [], query }) {
     match.indices.forEach(([start, end]) => {
       const matchText = text.substring(start, end + 1)
       highlighted = highlighted.replace(
-        matchText,
+        new RegExp(`(${escapeRegExp(matchText)})`, 'gi'),
         `<span class="font-semibold text-burgundy">${matchText}</span>`
       )
     })
     return highlighted
+  }
+
+  // Helper function to escape special regex characters
+  const escapeRegExp = (string) => {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   }
 
   // Format next appointment
