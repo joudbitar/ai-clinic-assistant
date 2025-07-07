@@ -310,6 +310,17 @@ class ErrorResponse(BaseModel):
     error: str
     detail: Optional[str] = None
 
+class NewPatientConsultationData(BaseModel):
+    first_name: str
+    last_name: str
+    gender: Optional[str] = None
+    date_of_birth: str
+    phone_1: str
+    phone_2: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
+    national_id: Optional[str] = None
+
 # AI Summary Generation Function
 async def generate_consultation_summary(transcript: str) -> str:
     """Generate AI-powered consultation summary using GPT-4."""
@@ -321,15 +332,18 @@ async def generate_consultation_summary(transcript: str) -> str:
             logger.info("Transcript too short for meaningful summary")
             return "Transcript too short for summary generation."
         
-        # Medical prompt for GPT-4
-        medical_prompt = """You are a medical assistant helping an oncologist. 
+        # Medical prompt for GPT-4 - multilingual support
+        medical_prompt = """You are a medical assistant helping an oncologist. You can understand and respond in multiple languages.
+
+IMPORTANT: Always respond in the same language as the input transcript. If the transcript is in Arabic, respond in Arabic. If it's in French, respond in French, etc.
+
 Given the following transcript, create bullet points focusing on:
-- history of present illness
+- history of present illness  
 - significant past events
 - planned investigations or treatments
-- comorbidities and relevant medical history.
+- comorbidities and relevant medical history
 
-Only include direct facts, no generic comments. Be precise and use a clinical tone."""
+Only include direct facts, no generic comments. Be precise and use a clinical tone. Remember to respond in the same language as the transcript."""
         
         # Create the chat completion request
         response = openai.chat.completions.create(
@@ -350,6 +364,100 @@ Only include direct facts, no generic comments. Be precise and use a clinical to
     except Exception as e:
         logger.error(f"Failed to generate AI summary: {str(e)}")
         return f"Summary generation failed: {str(e)}"
+
+async def parse_clinical_data_from_summary(summary: str) -> dict:
+    """Parse structured clinical data from consultation summary using OpenAI."""
+    try:
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        
+        prompt = f"""
+        Please extract both CLINICAL and DEMOGRAPHIC information from the following consultation summary.
+        Return a JSON object with the following fields:
+        
+        CLINICAL FIELDS:
+        - chief_complaint: Main reason for visit
+        - history_present_illness: Current illness details
+        - past_medical_history: Previous medical conditions
+        - medications: Current medications list
+        - allergies: Known allergies
+        - diagnosis: Clinical diagnosis or impression
+        - plan: Treatment plan and recommendations
+        - additional_notes: Any other relevant clinical notes
+        
+        DEMOGRAPHIC FIELDS:
+        - age: Patient's age (number only)
+        - gender: Male/Female/Other
+        - occupation: Patient's job/profession
+        - education: Education level
+        - marital_status: Single/Married/Divorced/Widowed
+        - children_count: Number of children (number only)
+        - smoking: true/false if smoking status mentioned
+        - country_of_birth: Country of birth if mentioned
+        - city_of_birth: City of birth if mentioned
+        - address: Full address if mentioned
+        - emergency_contact: Emergency contact info if mentioned
+        - insurance: Insurance information if mentioned
+        
+        IMPORTANT INSTRUCTIONS:
+        - For demographic fields, ONLY extract information explicitly mentioned in the conversation
+        - If any field is not mentioned or unclear, use null for that field
+        - For age, extract actual number mentioned (e.g., if "52 years old" mentioned, return 52)
+        - For smoking, return true if patient smokes, false if explicitly non-smoker, null if not mentioned
+        - Be very careful to only extract information actually stated in the conversation
+        
+        Consultation Summary:
+        {summary}
+        
+        Return only valid JSON:
+        """
+        
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a medical assistant that extracts structured clinical and demographic data from consultation notes. Always return valid JSON only. Only extract information explicitly mentioned in the conversation."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1,
+            max_tokens=1500
+        )
+        
+        # Parse the JSON response
+        clinical_data = response.choices[0].message.content.strip()
+        
+        # Remove any markdown formatting if present
+        if clinical_data.startswith("```json"):
+            clinical_data = clinical_data[7:]
+        if clinical_data.endswith("```"):
+            clinical_data = clinical_data[:-3]
+        
+        import json
+        return json.loads(clinical_data)
+        
+    except Exception as e:
+        logger.error(f"Failed to parse clinical data: {str(e)}")
+        return {
+            "chief_complaint": None,
+            "history_present_illness": None,
+            "past_medical_history": None,
+            "medications": None,
+            "allergies": None,
+            "diagnosis": None,
+            "plan": None,
+            "additional_notes": f"Failed to parse clinical data: {str(e)}",
+            # Demographic fields
+            "age": None,
+            "gender": None,
+            "occupation": None,
+            "education": None,
+            "marital_status": None,
+            "children_count": None,
+            "smoking": None,
+            "country_of_birth": None,
+            "city_of_birth": None,
+            "address": None,
+            "emergency_contact": None,
+            "insurance": None
+        }
 
 @app.get("/")
 async def root():
@@ -533,37 +641,110 @@ async def upload_file(
         logger.info("Generating AI consultation summary...")
         summary = await generate_consultation_summary(transcript)
         
-        # Insert record into database with transcript and summary
-        try:
-            logger.info("Inserting record into database with transcript and summary...")
-            recording_data = {
-                "id": recording_id,
-                "filename": unique_filename,
-                "transcript": transcript,
-                "summary": summary,
-                "created_at": current_time.isoformat()
-            }
-            
-            # Add patient_id if provided
-            if patient_id:
-                recording_data["patient_id"] = patient_id
-                logger.info(f"Linking recording to patient: {patient_id}")
-            
-            db_response = supabase.table("recordings").insert(recording_data).execute()
-            logger.info(f"Database insert response: {db_response}")
-            logger.info("SUCCESS: Transcript and AI summary stored, no audio file saved to reduce storage costs")
-        except Exception as e:
-            logger.error(f"Database insert failed: {str(e)}")
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Failed to insert database record: {str(e)}"
-            )
+        # Parse clinical and demographic data from summary
+        clinical_data = await parse_clinical_data_from_summary(summary)
         
-        logger.info(f"Transcription and summarization process completed successfully for {unique_filename}")
+        # Store the file in Supabase storage
+        storage_path = f"recordings/{unique_filename}"
+        storage_response = supabase.storage.from_("recordings").upload(
+            path=storage_path,
+            file=file_content,
+            file_options={"content-type": file.content_type or "application/octet-stream"}
+        )
+        
+        if storage_response.error:
+            logger.error(f"Storage upload failed: {storage_response.error}")
+            raise HTTPException(status_code=500, detail="Failed to store file")
+        
+        # Get public URL
+        public_url_response = supabase.storage.from_("recordings").get_public_url(storage_path)
+        public_url = public_url_response.data['publicUrl'] if public_url_response.data else None
+        
+        # Create recording record with clinical data
+        recording_record = {
+            "id": recording_id,
+            "filename": unique_filename,
+            "original_filename": file.filename,
+            "url": public_url,
+            "transcript": transcript,
+            "summary": summary,
+            "patient_id": patient_id,
+            "created_at": current_time.isoformat(),
+            # Add parsed clinical data
+            "chief_complaint": clinical_data.get('chief_complaint'),
+            "history_present_illness": clinical_data.get('history_present_illness'),
+            "past_medical_history": clinical_data.get('past_medical_history'),
+            "medications": clinical_data.get('medications'),
+            "allergies": clinical_data.get('allergies'),
+            "diagnosis": clinical_data.get('diagnosis'),
+            "plan": clinical_data.get('plan'),
+            "additional_notes": clinical_data.get('additional_notes')
+        }
+        
+        recording_response = supabase.table("recordings").insert(recording_record).execute()
+        
+        if recording_response.error:
+            logger.error(f"Database insert failed: {recording_response.error}")
+            raise HTTPException(status_code=500, detail="Failed to save recording record")
+        
+        # Update patient record with extracted clinical and demographic data
+        if patient_id:  # If linked to a patient, update their record
+            patient_update = {}
+            
+            # Add clinical data
+            if clinical_data.get('diagnosis'):
+                patient_update["diagnosis"] = clinical_data.get('diagnosis')
+            if clinical_data.get('additional_notes'):
+                patient_update["clinical_notes"] = clinical_data.get('additional_notes')
+            if clinical_data.get('allergies'):
+                patient_update["allergies"] = clinical_data.get('allergies')
+            if clinical_data.get('medications'):
+                patient_update["medications"] = clinical_data.get('medications')
+            
+            # Get current patient data to check what's missing
+            current_patient = supabase.table("patients").select("*").eq("id", patient_id).execute()
+            
+            if current_patient.data:
+                patient_data = current_patient.data[0]
+                
+                # Add demographic data only if not already present in patient record
+                if not patient_data.get('occupation') and clinical_data.get('occupation'):
+                    patient_update["occupation"] = clinical_data.get('occupation')
+                
+                if not patient_data.get('education') and clinical_data.get('education'):
+                    patient_update["education"] = clinical_data.get('education')
+                
+                if not patient_data.get('marital_status') and clinical_data.get('marital_status'):
+                    patient_update["marital_status"] = clinical_data.get('marital_status')
+                
+                if not patient_data.get('children_count') and clinical_data.get('children_count'):
+                    if isinstance(clinical_data.get('children_count'), (int, float)):
+                        patient_update["children_count"] = int(clinical_data.get('children_count'))
+                
+                if patient_data.get('smoking') is None and clinical_data.get('smoking') is not None:
+                    patient_update["smoking"] = clinical_data.get('smoking')
+                
+                if not patient_data.get('country_of_birth') and clinical_data.get('country_of_birth'):
+                    patient_update["country_of_birth"] = clinical_data.get('country_of_birth')
+                
+                if not patient_data.get('city_of_birth') and clinical_data.get('city_of_birth'):
+                    patient_update["city_of_birth"] = clinical_data.get('city_of_birth')
+                
+                # Enhance address if current one is empty or very basic
+                if clinical_data.get('address') and (
+                    not patient_data.get('address') or 
+                    len(patient_data.get('address', '')) < 20
+                ):
+                    patient_update["address"] = clinical_data.get('address')
+            
+            # Apply updates if any
+            if patient_update:
+                update_response = supabase.table("patients").update(patient_update).eq("id", patient_id).execute()
+                logger.info(f"Enhanced patient record with extracted data: {list(patient_update.keys())}")
         
         return UploadResponse(
             id=recording_id,
-            filename=unique_filename,
+            filename=file.filename,
             transcript=transcript,
             summary=summary,
             patient_id=patient_id,
@@ -1426,6 +1607,215 @@ async def delete_patient_baseline(baseline_id: str):
     except Exception as e:
         logger.error(f"Error deleting patient baseline: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to delete baseline record")
+
+@app.post("/consultation/new_patient", response_model=UploadResponse)
+async def create_new_patient_consultation(
+    file: UploadFile = File(...),
+    patient_data: str = Form(...)
+):
+    """Create a new patient and process their first consultation recording."""
+    try:
+        # Parse patient data from JSON string
+        import json
+        patient_info = json.loads(patient_data)
+        logger.info(f"Creating new patient consultation: {patient_info.get('first_name')} {patient_info.get('last_name')}")
+        
+        # Validate required fields
+        required_fields = ['first_name', 'last_name', 'date_of_birth', 'phone_1']
+        missing_fields = [field for field in required_fields if not patient_info.get(field)]
+        if missing_fields:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Missing required fields: {', '.join(missing_fields)}"
+            )
+        
+        # Check if patient already exists
+        existing = supabase.table("patients").select("*").eq(
+            "first_name", patient_info['first_name'].strip()
+        ).eq(
+            "last_name", patient_info['last_name'].strip()
+        ).eq(
+            "phone_1", patient_info['phone_1'].strip()
+        ).execute()
+        
+        patient_id = None
+        if existing.data:
+            logger.info("Patient already exists, using existing record")
+            patient_id = existing.data[0]['id']
+        else:
+            # Create new patient
+            patient_id = str(uuid.uuid4())
+            current_time = datetime.utcnow()
+            
+            patient_record = {
+                "id": patient_id,
+                "first_name": patient_info['first_name'].strip(),
+                "last_name": patient_info['last_name'].strip(),
+                "date_of_birth": patient_info['date_of_birth'].strip(),
+                "phone_1": patient_info['phone_1'].strip(),
+                "created_at": current_time.isoformat()
+            }
+            
+            # Add optional fields from form if provided
+            if patient_info.get('gender'):
+                patient_record["gender"] = patient_info['gender']
+            if patient_info.get('phone_2'):
+                patient_record["phone_2"] = patient_info['phone_2'].strip()
+            if patient_info.get('email'):
+                patient_record["email"] = patient_info['email'].strip()
+            if patient_info.get('address'):
+                patient_record["address"] = patient_info['address'].strip()
+            if patient_info.get('national_id'):
+                patient_record["national_id"] = patient_info['national_id'].strip()
+            
+            response = supabase.table("patients").insert(patient_record).execute()
+            logger.info(f"Created new patient with ID: {patient_id}")
+            
+            # Store the initial patient record, we'll update it with extracted demographic data later
+        
+        # Process the audio file (similar to existing upload endpoint)
+        file_content = await file.read()
+        file_extension = Path(file.filename).suffix
+        unique_filename = f"{uuid.uuid4()}{file_extension}"
+        
+        # Process file based on type
+        transcript = ""
+        if file.content_type and (file.content_type.startswith('audio/') or file.content_type.startswith('video/')):
+            transcript = await process_audio_file(file_content, unique_filename, file.content_type)
+        elif file.content_type == 'text/plain' or file_extension.lower() == '.txt':
+            transcript = file_content.decode('utf-8')
+        elif file.content_type == 'application/pdf' or file_extension.lower() == '.pdf':
+            transcript = await process_pdf_file(file_content, unique_filename)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported file type: {file.content_type}")
+        
+        # Generate summary
+        summary = await generate_consultation_summary(transcript)
+        
+        # Parse clinical data from summary
+        clinical_data = await parse_clinical_data_from_summary(summary)
+        
+        # Store the file in Supabase storage
+        storage_path = f"recordings/{unique_filename}"
+        storage_response = supabase.storage.from_("recordings").upload(
+            path=storage_path,
+            file=file_content,
+            file_options={"content-type": file.content_type or "application/octet-stream"}
+        )
+        
+        if storage_response.error:
+            logger.error(f"Storage upload failed: {storage_response.error}")
+            raise HTTPException(status_code=500, detail="Failed to store file")
+        
+        # Get public URL
+        public_url_response = supabase.storage.from_("recordings").get_public_url(storage_path)
+        public_url = public_url_response.data['publicUrl'] if public_url_response.data else None
+        
+        # Create recording record with clinical data
+        recording_id = str(uuid.uuid4())
+        current_time = datetime.utcnow()
+        
+        recording_record = {
+            "id": recording_id,
+            "filename": unique_filename,
+            "original_filename": file.filename,
+            "url": public_url,
+            "transcript": transcript,
+            "summary": summary,
+            "patient_id": patient_id,
+            "created_at": current_time.isoformat(),
+            # Add parsed clinical data
+            "chief_complaint": clinical_data.get('chief_complaint'),
+            "history_present_illness": clinical_data.get('history_present_illness'),
+            "past_medical_history": clinical_data.get('past_medical_history'),
+            "medications": clinical_data.get('medications'),
+            "allergies": clinical_data.get('allergies'),
+            "diagnosis": clinical_data.get('diagnosis'),
+            "plan": clinical_data.get('plan'),
+            "additional_notes": clinical_data.get('additional_notes')
+        }
+        
+        recording_response = supabase.table("recordings").insert(recording_record).execute()
+        
+        if recording_response.error:
+            logger.error(f"Database insert failed: {recording_response.error}")
+            raise HTTPException(status_code=500, detail="Failed to save recording record")
+        
+        # Update patient record with extracted clinical and demographic data
+        if patient_id:  # If linked to a patient, update their record
+            patient_update = {}
+            
+            # Add clinical data
+            if clinical_data.get('diagnosis'):
+                patient_update["diagnosis"] = clinical_data.get('diagnosis')
+            if clinical_data.get('additional_notes'):
+                patient_update["clinical_notes"] = clinical_data.get('additional_notes')
+            if clinical_data.get('allergies'):
+                patient_update["allergies"] = clinical_data.get('allergies')
+            if clinical_data.get('medications'):
+                patient_update["medications"] = clinical_data.get('medications')
+            
+            # Get current patient data to check what's missing
+            current_patient = supabase.table("patients").select("*").eq("id", patient_id).execute()
+            
+            if current_patient.data:
+                patient_data = current_patient.data[0]
+                
+                # Add demographic data only if not already present in patient record
+                if not patient_data.get('occupation') and clinical_data.get('occupation'):
+                    patient_update["occupation"] = clinical_data.get('occupation')
+                
+                if not patient_data.get('education') and clinical_data.get('education'):
+                    patient_update["education"] = clinical_data.get('education')
+                
+                if not patient_data.get('marital_status') and clinical_data.get('marital_status'):
+                    patient_update["marital_status"] = clinical_data.get('marital_status')
+                
+                if not patient_data.get('children_count') and clinical_data.get('children_count'):
+                    if isinstance(clinical_data.get('children_count'), (int, float)):
+                        patient_update["children_count"] = int(clinical_data.get('children_count'))
+                
+                if patient_data.get('smoking') is None and clinical_data.get('smoking') is not None:
+                    patient_update["smoking"] = clinical_data.get('smoking')
+                
+                if not patient_data.get('country_of_birth') and clinical_data.get('country_of_birth'):
+                    patient_update["country_of_birth"] = clinical_data.get('country_of_birth')
+                
+                if not patient_data.get('city_of_birth') and clinical_data.get('city_of_birth'):
+                    patient_update["city_of_birth"] = clinical_data.get('city_of_birth')
+                
+                # Enhance address if current one is empty or very basic
+                if clinical_data.get('address') and (
+                    not patient_data.get('address') or 
+                    len(patient_data.get('address', '')) < 20
+                ):
+                    patient_update["address"] = clinical_data.get('address')
+            
+            # Apply updates if any
+            if patient_update:
+                update_response = supabase.table("patients").update(patient_update).eq("id", patient_id).execute()
+                logger.info(f"Enhanced patient record with extracted data: {list(patient_update.keys())}")
+        
+        logger.info(f"Successfully created consultation for patient ID: {patient_id}")
+        
+        return UploadResponse(
+            id=recording_id,
+            filename=file.filename,
+            transcript=transcript,
+            summary=summary,
+            patient_id=patient_id,
+            created_at=current_time
+        )
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid patient data JSON: {str(e)}")
+        raise HTTPException(status_code=400, detail="Invalid patient data format")
+    except Exception as e:
+        logger.error(f"Failed to create patient consultation: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to create patient consultation: {str(e)}"
+        )
 
 if __name__ == "__main__":
     import uvicorn
