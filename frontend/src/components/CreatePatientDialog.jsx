@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -99,7 +99,7 @@ export function CreatePatientDialog() {
         {field.type === 'select' ? (
           <Select 
             value={value} 
-            onValueChange={(value) => updateField(field.key, value)}
+            onChange={(e) => updateField(field.key, e.target.value)}
             disabled={createPatientMutation.isPending}
           >
             <option value="">Select...</option>
@@ -148,6 +148,9 @@ export function CreatePatientDialog() {
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add New Patient</DialogTitle>
+          <DialogDescription>
+            Create a new patient record with demographic and contact information.
+          </DialogDescription>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-6">

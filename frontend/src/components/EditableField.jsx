@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Check, X, Edit3 } from 'lucide-react'
+import { Check, X, Edit3, Sparkles, AlertCircle } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -24,7 +24,8 @@ export function EditableField({
   patientId = null, // For automatic mutations
   field = null, // Field name for automatic mutations
   relatedData = null, // For clinical calculations (e.g., BMI)
-  showBMI = false // Show BMI calculation for weight/height
+  showBMI = false, // Show BMI calculation for weight/height
+  extractionStatus = null // 'extracted', 'not_extracted', null
 }) {
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState('')
@@ -47,6 +48,34 @@ export function EditableField({
       }
     }
   }, [isEditing, type])
+
+  const getExtractionIndicator = () => {
+    if (!extractionStatus) return null
+    
+    if (extractionStatus === 'extracted') {
+      return (
+        <Badge 
+          variant="secondary" 
+          className="ml-2 text-xs bg-green-100 text-green-800 border-green-200 hover:bg-green-100"
+        >
+          <Sparkles className="h-3 w-3 mr-1" />
+          AI Extracted
+        </Badge>
+      )
+    } else if (extractionStatus === 'not_extracted') {
+      return (
+        <Badge 
+          variant="secondary" 
+          className="ml-2 text-xs bg-orange-100 text-orange-800 border-orange-200 hover:bg-orange-100"
+        >
+          <AlertCircle className="h-3 w-3 mr-1" />
+          Needs Input
+        </Badge>
+      )
+    }
+    
+    return null
+  }
 
   const startEditing = () => {
     setIsEditing(true)
@@ -182,23 +211,34 @@ export function EditableField({
         'group relative min-h-[24px] flex items-center',
         'hover:bg-muted/5 rounded px-2 -mx-2',
         'transition-colors duration-100',
+        extractionStatus === 'extracted' && 'bg-green-50/50 border-l-2 border-green-300',
+        extractionStatus === 'not_extracted' && 'bg-orange-50/50 border-l-2 border-orange-300',
         displayClassName
       )}
       onClick={startEditing}
     >
       {isEditing ? (
-        renderInput()
+        <div className="flex items-center w-full">
+          {renderInput()}
+          {getExtractionIndicator()}
+        </div>
       ) : (
         <div className="w-full cursor-text">
           {badge ? (
-            <Badge variant="outline" className="font-normal text-xs">
-              {getDisplayValue()}
-            </Badge>
+            <div className="flex items-center">
+              <Badge variant="outline" className="font-normal text-xs">
+                {getDisplayValue()}
+              </Badge>
+              {getExtractionIndicator()}
+            </div>
           ) : (
-            <span className="text-xs text-gray-600">
-              {icon && <span className="mr-2">{icon}</span>}
-              {getDisplayValue()}
-            </span>
+            <div className="flex items-center justify-between w-full">
+              <span className="text-xs text-gray-600">
+                {icon && <span className="mr-2">{icon}</span>}
+                {getDisplayValue()}
+              </span>
+              {getExtractionIndicator()}
+            </div>
           )}
         </div>
       )}
