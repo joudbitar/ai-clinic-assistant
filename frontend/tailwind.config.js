@@ -18,6 +18,14 @@ export default {
     },
     extend: {
       colors: {
+        parchment: '#F9F6F1',   // main background
+        almond: '#F1EAE1',      // cards / sections
+        cacao: '#5B4A42',       // text headings
+        sage: '#7E9C90',        // accents / links
+        saffron: '#FFB547',     // status highlights
+        clay: '#D0614C',        // warm urgency color
+        burgundy: '#800020',    // search highlight color
+        
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -73,5 +81,5 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [require("tailwindcss-animate")],
 };

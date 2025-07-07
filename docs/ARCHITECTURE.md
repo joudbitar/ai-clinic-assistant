@@ -30,3 +30,4 @@ The app is divided into 4 major layers:
 - Supabase hosts DB & auth.
 - Railway or Render hosts FastAPI.
 - Vercel hosts frontend.
+ 
