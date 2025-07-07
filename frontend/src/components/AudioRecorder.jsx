@@ -11,7 +11,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 export function AudioRecorder({ 
   selectedPatient, 
   consultationType,
-  newPatientData,
   onValidationCheck,
   onUploadComplete, 
   onUploadProgress, 
@@ -248,7 +247,6 @@ export function AudioRecorder({
       } else {
         // For new patients, use the new endpoint
         endpoint = 'http://localhost:8000/consultation/new_patient'
-        formData.append('patient_data', JSON.stringify(newPatientData))
       }
       
       const response = await fetch(endpoint, {

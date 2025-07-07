@@ -17,6 +17,7 @@ import { Switch } from '@/components/ui/switch'
 import { EditableField } from '@/components/EditableField'
 import { ClinicalEditableTable } from '@/components/ClinicalEditableTable'
 import { BMIBadge, CancerStageBadge, SmokingRiskBadge } from '@/components/ClinicalBadge'
+import { usePatientRecordings } from '@/hooks/usePatients'
 import { 
   chemotherapyFields, 
   radiotherapyFields, 
@@ -38,6 +39,39 @@ import OtherTreatmentsSection from './OtherTreatmentsSection'
 
 // Demographics Section
 export function DemographicsSection({ patient, patientId }) {
+  const [extractionMetadata, setExtractionMetadata] = useState(null)
+
+  // Fetch patient recordings to get extraction metadata
+  const { data: recordings } = usePatientRecordings(patientId)
+
+  useEffect(() => {
+    if (recordings && recordings.length > 0) {
+      // Find the most recent recording with extraction_metadata
+      const recentRecordingWithMetadata = recordings
+        .filter(recording => recording.extraction_metadata)
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]
+      
+      if (recentRecordingWithMetadata?.extraction_metadata) {
+        setExtractionMetadata(recentRecordingWithMetadata.extraction_metadata)
+      }
+    }
+  }, [recordings])
+
+  const getFieldExtractionStatus = (fieldName) => {
+    if (!extractionMetadata) return null
+    
+    const extracted = extractionMetadata.extracted_fields || []
+    const notFound = extractionMetadata.not_found_fields || []
+    
+    if (extracted.includes(fieldName)) {
+      return 'extracted'
+    } else if (notFound.includes(fieldName)) {
+      return 'not_extracted'
+    }
+    
+    return null
+  }
+  
   const validateEmail = (email) => {
     if (!email) return null
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -104,6 +138,11 @@ export function DemographicsSection({ patient, patientId }) {
         <CardTitle className="text-lg flex items-center gap-2">
           <Icon className="h-5 w-5 text-blue-600" />
           {title}
+          {extractionMetadata && (
+            <Badge variant="outline" className="ml-2 text-xs">
+              AI Enhanced
+            </Badge>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -125,6 +164,7 @@ export function DemographicsSection({ patient, patientId }) {
                     placeholder={`Enter ${item.label.toLowerCase()}`}
                     validate={item.required ? validateRequired : item.type === 'email' ? validateEmail : item.type === 'tel' ? validatePhone : null}
                     formatDisplay={item.formatDisplay}
+                    extractionStatus={getFieldExtractionStatus(item.field)}
                     className="text-sm"
                   />
                 </div>

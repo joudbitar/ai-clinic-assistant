@@ -305,6 +305,7 @@ class UploadResponse(BaseModel):
     summary: Optional[str] = None
     patient_id: Optional[str] = None
     created_at: datetime
+    extraction_metadata: Optional[dict] = None  # New field to show which fields were extracted
 
 class ErrorResponse(BaseModel):
     error: str
@@ -365,6 +366,118 @@ Only include direct facts, no generic comments. Be precise and use a clinical to
         logger.error(f"Failed to generate AI summary: {str(e)}")
         return f"Summary generation failed: {str(e)}"
 
+async def extract_patient_demographics_from_transcript(transcript: str) -> dict:
+    """Extract patient demographic information from consultation transcript."""
+    try:
+        messages = [
+            {
+                "role": "system",
+                "content": """You are a medical AI assistant specialized in extracting patient demographic information from consultation transcripts. 
+                
+IMPORTANT: The input transcript may be in any language (Arabic, English, French, etc.), but you MUST extract and return ALL demographic information in ENGLISH only. Translate names, places, occupations, and all other information to English.
+
+Extract the following patient information from the transcript:
+- First name (translate to English if needed)
+- Last name (translate to English if needed)
+- Father's name (translate to English if needed)
+- Mother's name (translate to English if needed)
+- Age or date of birth
+- Gender (male/female/other - in English)
+- Phone numbers (primary and secondary)
+- Email address
+- Home address (translate city/country names to English)
+- Occupation (translate to English)
+- Education level (translate to English)
+- Marital status (single/married/divorced/widowed - in English)
+- Number of children
+- Country/city of birth (translate to English)
+- National ID (if mentioned)
+- File reference number (if mentioned)
+- Case number (if mentioned)
+- Referring physician name (translate to English if needed)
+- Referring physician phone (if mentioned)
+- Referring physician email (if mentioned)
+- Third party payer/insurance (translate to English if needed)
+- Medical reference number (if mentioned)
+- Any other relevant demographic information
+
+TRANSLATION EXAMPLES:
+- If transcript says "اسمي أحمد محمد" → extract as "first_name": "Ahmed", "last_name": "Mohammed"
+- If transcript says "Je suis médecin" → extract as "occupation": "Doctor"
+- If transcript says "أنا متزوج" → extract as "marital_status": "married"
+- If transcript says "أسكن في الرياض" → extract as "address": "Riyadh, Saudi Arabia"
+
+Return a JSON object with the extracted information. Use null for fields that are not found or unclear. 
+For fields that are extracted, include high confidence level. 
+Always include an 'extraction_metadata' field showing which fields were successfully extracted vs not found.
+
+Format:
+{
+    "first_name": "John",
+    "last_name": "Smith",
+    "father_name": "Robert Smith",
+    "mother_name": "Mary Johnson",
+    "age": 45,
+    "date_of_birth": "1978-05-15",
+    "gender": "male",
+    "phone_1": "+1234567890",
+    "phone_2": "+1234567891",
+    "email": "john.smith@email.com",
+    "address": "123 Main St, City, Country",
+    "occupation": "Engineer",
+    "education": "Bachelor's Degree",
+    "marital_status": "married",
+    "children_count": 2,
+    "country_of_birth": "USA",
+    "city_of_birth": "New York",
+    "national_id": "123456789",
+    "file_reference": "REF-2024-001",
+    "case_number": "CASE-12345",
+    "referring_physician_name": "Dr. Jane Doe",
+    "referring_physician_phone_1": "+1234567892",
+    "referring_physician_email": "jane.doe@clinic.com",
+    "third_party_payer": "Health Insurance Co.",
+    "medical_ref_number": "MED-67890",
+    "extraction_metadata": {
+        "extracted_fields": ["first_name", "last_name", "father_name", "age", "phone_1", "occupation"],
+        "not_found_fields": ["mother_name", "phone_2", "email", "national_id", "city_of_birth"],
+        "confidence_level": "high"
+    }
+}"""
+            },
+            {
+                "role": "user",
+                "content": f"Extract patient demographic information from this consultation transcript:\n\n{transcript}"
+            }
+        ]
+        
+        response = openai.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            temperature=0.1,
+            max_tokens=2000
+        )
+        
+        demographics_text = response.choices[0].message.content.strip()
+        
+        # Parse the JSON response
+        import json
+        demographics = json.loads(demographics_text)
+        
+        logger.info(f"Extracted demographics: {demographics}")
+        return demographics
+        
+    except Exception as e:
+        logger.error(f"Failed to extract demographics: {str(e)}")
+        return {
+            "extraction_metadata": {
+                "extracted_fields": [],
+                "not_found_fields": ["first_name", "last_name", "father_name", "mother_name", "age", "date_of_birth", "gender", "phone_1", "phone_2", "email", "address", "occupation", "education", "marital_status", "children_count", "country_of_birth", "city_of_birth", "national_id", "file_reference", "case_number", "referring_physician_name", "referring_physician_phone_1", "referring_physician_email", "third_party_payer", "medical_ref_number"],
+                "confidence_level": "low",
+                "error": str(e)
+            }
+        }
+
 async def parse_clinical_data_from_summary(summary: str) -> dict:
     """Parse structured clinical data from consultation summary using OpenAI."""
     try:
@@ -382,7 +495,7 @@ async def parse_clinical_data_from_summary(summary: str) -> dict:
         - allergies: Known allergies
         - diagnosis: Clinical diagnosis or impression
         - plan: Treatment plan and recommendations
-        - additional_notes: Any other relevant clinical notes
+        - plan: Treatment plan and recommendations
         
         DEMOGRAPHIC FIELDS:
         - age: Patient's age (number only)
@@ -443,7 +556,6 @@ async def parse_clinical_data_from_summary(summary: str) -> dict:
             "allergies": None,
             "diagnosis": None,
             "plan": None,
-            "additional_notes": f"Failed to parse clinical data: {str(e)}",
             # Demographic fields
             "age": None,
             "gender": None,
@@ -458,6 +570,104 @@ async def parse_clinical_data_from_summary(summary: str) -> dict:
             "emergency_contact": None,
             "insurance": None
         }
+
+async def extract_comprehensive_clinical_data(transcript: str, summary: str) -> dict:
+    """Extract comprehensive clinical data including symptoms, biomarkers, response, risk factors."""
+    try:
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        
+        prompt = f"""
+        Extract comprehensive oncology clinical data from this consultation transcript and summary.
+        
+        Return a JSON object with these sections:
+        
+        SYMPTOM ASSESSMENT:
+        - pain_scale: 0-10 numeric scale if mentioned
+        - fatigue_level: "none", "mild", "moderate", "severe"
+        - appetite_change: describe percentage or qualitative change
+        - weight_change_lbs: numeric pounds gained/lost (negative for loss)
+        - weight_change_timeframe: "2 weeks", "3 months", etc.
+        - karnofsky_score: 0-100 if mentioned
+        - nccn_distress_score: 0-10 if distress mentioned
+        - activities_daily_living: "independent", "assisted", "dependent"
+        
+        BIOMARKER RESULTS:
+        - egfr_status: mutation status if mentioned
+        - alk_status: ALK rearrangement status
+        - pdl1_expression: percentage if mentioned
+        - msi_status: "stable", "instable", "high", "low"
+        - tumor_mutational_burden: "high", "low", "intermediate"
+        - germline_testing_recommended: true/false
+        
+        TREATMENT RESPONSE (if applicable):
+        - response_type: "complete", "partial", "stable", "progression"
+        - response_criteria: "RECIST", "WHO", etc.
+        - adverse_events: [{"event": "", "grade": 1-5, "attribution": "related/unrelated"}]
+        - dose_modifications: true/false
+        
+        RISK ASSESSMENT:
+        - smoking_status: "never", "former", "current"
+        - pack_years: calculated value if smoking history given
+        - quit_date: date if former smoker
+        - asbestos_exposure: true/false
+        - family_cancer_history: [{"relation": "", "cancer_type": "", "age_at_diagnosis": ""}]
+        
+        PSYCHOSOCIAL:
+        - depression_screening_result: if mental health mentioned
+        - primary_caregiver: "spouse", "child", "friend", "none"
+        - transportation_barriers: true/false
+        - financial_distress: true/false
+        - prognosis_discussed: true/false
+        
+        CLINICAL TRIALS:
+        - trial_name: if mentioned
+        - eligibility_assessed: true/false
+        - tumor_board_date: date if mentioned
+        - second_opinion_requested: true/false
+        
+        Use null for fields not mentioned. Only extract information explicitly stated.
+        
+        Transcript: {transcript}
+        Summary: {summary}
+        
+        Return only valid JSON:
+        """
+        
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a medical AI that extracts structured oncology data. Always return valid JSON only."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1,
+            max_tokens=2000
+        )
+        
+        clinical_text = response.choices[0].message.content.strip()
+        
+        # Clean and parse JSON
+        if clinical_text.startswith("```json"):
+            clinical_text = clinical_text[7:]
+        if clinical_text.endswith("```"):
+            clinical_text = clinical_text[:-3]
+        
+        import json
+        return json.loads(clinical_text)
+        
+    except Exception as e:
+        logger.error(f"Failed to extract comprehensive clinical data: {str(e)}")
+        return {
+            "symptom_assessment": {},
+            "biomarker_results": {},
+            "treatment_response": {},
+            "risk_assessment": {},
+            "psychosocial": {},
+            "clinical_trials": {},
+            "extraction_error": str(e)
+        }
+
+# NOTE: File storage functionality removed per user request
+# System now works with transcripts and AI processing only
 
 @app.get("/")
 async def root():
@@ -644,58 +854,32 @@ async def upload_file(
         # Parse clinical and demographic data from summary
         clinical_data = await parse_clinical_data_from_summary(summary)
         
-        # Store the file in Supabase storage
-        storage_path = f"recordings/{unique_filename}"
-        storage_response = supabase.storage.from_("recordings").upload(
-            path=storage_path,
-            file=file_content,
-            file_options={"content-type": file.content_type or "application/octet-stream"}
-        )
+        # NOTE: File storage disabled by user request - only storing transcript and metadata
+        public_url = None
         
-        if storage_response.error:
-            logger.error(f"Storage upload failed: {storage_response.error}")
-            raise HTTPException(status_code=500, detail="Failed to store file")
-        
-        # Get public URL
-        public_url_response = supabase.storage.from_("recordings").get_public_url(storage_path)
-        public_url = public_url_response.data['publicUrl'] if public_url_response.data else None
-        
-        # Create recording record with clinical data
+        # Create recording record with required fields
         recording_record = {
             "id": recording_id,
             "filename": unique_filename,
-            "original_filename": file.filename,
-            "url": public_url,
             "transcript": transcript,
             "summary": summary,
             "patient_id": patient_id,
-            "created_at": current_time.isoformat(),
-            # Add parsed clinical data
-            "chief_complaint": clinical_data.get('chief_complaint'),
-            "history_present_illness": clinical_data.get('history_present_illness'),
-            "past_medical_history": clinical_data.get('past_medical_history'),
-            "medications": clinical_data.get('medications'),
-            "allergies": clinical_data.get('allergies'),
-            "diagnosis": clinical_data.get('diagnosis'),
-            "plan": clinical_data.get('plan'),
-            "additional_notes": clinical_data.get('additional_notes')
+            "created_at": current_time.isoformat()
         }
         
         recording_response = supabase.table("recordings").insert(recording_record).execute()
         
-        if recording_response.error:
-            logger.error(f"Database insert failed: {recording_response.error}")
+        if not recording_response.data:
+            logger.error("Database insert failed: No data returned")
             raise HTTPException(status_code=500, detail="Failed to save recording record")
         
         # Update patient record with extracted clinical and demographic data
         if patient_id:  # If linked to a patient, update their record
             patient_update = {}
             
-            # Add clinical data
+            # Add clinical data to patient record (only basic fields)
             if clinical_data.get('diagnosis'):
                 patient_update["diagnosis"] = clinical_data.get('diagnosis')
-            if clinical_data.get('additional_notes'):
-                patient_update["clinical_notes"] = clinical_data.get('additional_notes')
             if clinical_data.get('allergies'):
                 patient_update["allergies"] = clinical_data.get('allergies')
             if clinical_data.get('medications'):
@@ -1610,68 +1794,11 @@ async def delete_patient_baseline(baseline_id: str):
 
 @app.post("/consultation/new_patient", response_model=UploadResponse)
 async def create_new_patient_consultation(
-    file: UploadFile = File(...),
-    patient_data: str = Form(...)
+    file: UploadFile = File(...)
 ):
-    """Create a new patient and process their first consultation recording."""
+    """Create a new patient and process their first consultation recording using AI demographic extraction."""
     try:
-        # Parse patient data from JSON string
-        import json
-        patient_info = json.loads(patient_data)
-        logger.info(f"Creating new patient consultation: {patient_info.get('first_name')} {patient_info.get('last_name')}")
-        
-        # Validate required fields
-        required_fields = ['first_name', 'last_name', 'date_of_birth', 'phone_1']
-        missing_fields = [field for field in required_fields if not patient_info.get(field)]
-        if missing_fields:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Missing required fields: {', '.join(missing_fields)}"
-            )
-        
-        # Check if patient already exists
-        existing = supabase.table("patients").select("*").eq(
-            "first_name", patient_info['first_name'].strip()
-        ).eq(
-            "last_name", patient_info['last_name'].strip()
-        ).eq(
-            "phone_1", patient_info['phone_1'].strip()
-        ).execute()
-        
-        patient_id = None
-        if existing.data:
-            logger.info("Patient already exists, using existing record")
-            patient_id = existing.data[0]['id']
-        else:
-            # Create new patient
-            patient_id = str(uuid.uuid4())
-            current_time = datetime.utcnow()
-            
-            patient_record = {
-                "id": patient_id,
-                "first_name": patient_info['first_name'].strip(),
-                "last_name": patient_info['last_name'].strip(),
-                "date_of_birth": patient_info['date_of_birth'].strip(),
-                "phone_1": patient_info['phone_1'].strip(),
-                "created_at": current_time.isoformat()
-            }
-            
-            # Add optional fields from form if provided
-            if patient_info.get('gender'):
-                patient_record["gender"] = patient_info['gender']
-            if patient_info.get('phone_2'):
-                patient_record["phone_2"] = patient_info['phone_2'].strip()
-            if patient_info.get('email'):
-                patient_record["email"] = patient_info['email'].strip()
-            if patient_info.get('address'):
-                patient_record["address"] = patient_info['address'].strip()
-            if patient_info.get('national_id'):
-                patient_record["national_id"] = patient_info['national_id'].strip()
-            
-            response = supabase.table("patients").insert(patient_record).execute()
-            logger.info(f"Created new patient with ID: {patient_id}")
-            
-            # Store the initial patient record, we'll update it with extracted demographic data later
+        logger.info("Creating new patient consultation with AI demographic extraction")
         
         # Process the audio file (similar to existing upload endpoint)
         file_content = await file.read()
@@ -1689,112 +1816,164 @@ async def create_new_patient_consultation(
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported file type: {file.content_type}")
         
+        # Extract patient demographics from transcript
+        demographics = await extract_patient_demographics_from_transcript(transcript)
+        
         # Generate summary
         summary = await generate_consultation_summary(transcript)
         
         # Parse clinical data from summary
         clinical_data = await parse_clinical_data_from_summary(summary)
         
-        # Store the file in Supabase storage
-        storage_path = f"recordings/{unique_filename}"
-        storage_response = supabase.storage.from_("recordings").upload(
-            path=storage_path,
-            file=file_content,
-            file_options={"content-type": file.content_type or "application/octet-stream"}
-        )
+        # Create patient with extracted demographics
+        patient_id = None
+        extraction_metadata = demographics.get('extraction_metadata', {})
         
-        if storage_response.error:
-            logger.error(f"Storage upload failed: {storage_response.error}")
-            raise HTTPException(status_code=500, detail="Failed to store file")
+        # Check if we have minimum required information to create a patient
+        if demographics.get('first_name') and demographics.get('last_name'):
+            # Check if patient already exists
+            existing = supabase.table("patients").select("*").eq(
+                "first_name", demographics['first_name'].strip()
+            ).eq(
+                "last_name", demographics['last_name'].strip()
+            ).execute()
+            
+            if existing.data and demographics.get('phone_1'):
+                # Also check phone if available
+                existing_with_phone = [p for p in existing.data if p.get('phone_1') == demographics['phone_1'].strip()]
+                if existing_with_phone:
+                    logger.info("Patient already exists, using existing record")
+                    patient_id = existing_with_phone[0]['id']
+                    extraction_metadata['patient_status'] = 'existing'
+                else:
+                    existing = None
+            
+            if not existing or not existing.data:
+                # Create new patient with extracted demographics
+                patient_id = str(uuid.uuid4())
+                current_time = datetime.utcnow()
+                
+                patient_record = {
+                    "id": patient_id,
+                    "created_at": current_time.isoformat()
+                }
+                
+                # Add extracted demographic fields
+                if demographics.get('first_name'):
+                    patient_record["first_name"] = demographics['first_name'].strip()
+                if demographics.get('last_name'):
+                    patient_record["last_name"] = demographics['last_name'].strip()
+                if demographics.get('father_name'):
+                    patient_record["father_name"] = demographics['father_name'].strip()
+                if demographics.get('mother_name'):
+                    patient_record["mother_name"] = demographics['mother_name'].strip()
+                if demographics.get('date_of_birth'):
+                    patient_record["date_of_birth"] = demographics['date_of_birth']
+                elif demographics.get('age'):
+                    # Calculate approximate date of birth from age
+                    current_year = datetime.utcnow().year
+                    birth_year = current_year - int(demographics['age'])
+                    patient_record["date_of_birth"] = f"{birth_year}-01-01"
+                
+                if demographics.get('gender'):
+                    patient_record["gender"] = demographics['gender']
+                if demographics.get('phone_1'):
+                    patient_record["phone_1"] = demographics['phone_1'].strip()
+                if demographics.get('phone_2'):
+                    patient_record["phone_2"] = demographics['phone_2'].strip()
+                if demographics.get('email'):
+                    patient_record["email"] = demographics['email'].strip()
+                if demographics.get('address'):
+                    patient_record["address"] = demographics['address'].strip()
+                if demographics.get('occupation'):
+                    patient_record["occupation"] = demographics['occupation'].strip()
+                if demographics.get('education'):
+                    patient_record["education"] = demographics['education'].strip()
+                if demographics.get('marital_status'):
+                    patient_record["marital_status"] = demographics['marital_status']
+                
+                # Add all extracted fields to patient record
+                if demographics.get('children_count'):
+                    patient_record["children_count"] = int(demographics['children_count'])
+                if demographics.get('education'):
+                    patient_record["education"] = demographics['education'].strip()
+                if demographics.get('file_reference'):
+                    patient_record["file_reference"] = demographics['file_reference'].strip()
+                if demographics.get('case_number'):
+                    patient_record["case_number"] = demographics['case_number'].strip()
+                if demographics.get('referring_physician_name'):
+                    patient_record["referring_physician_name"] = demographics['referring_physician_name'].strip()
+                if demographics.get('referring_physician_phone_1'):
+                    patient_record["referring_physician_phone_1"] = demographics['referring_physician_phone_1'].strip()
+                if demographics.get('referring_physician_email'):
+                    patient_record["referring_physician_email"] = demographics['referring_physician_email'].strip()
+                if demographics.get('third_party_payer'):
+                    patient_record["third_party_payer"] = demographics['third_party_payer'].strip()
+                if demographics.get('medical_ref_number'):
+                    patient_record["medical_ref_number"] = demographics['medical_ref_number'].strip()
+                
+                response = supabase.table("patients").insert(patient_record).execute()
+                logger.info(f"Created new patient with ID: {patient_id}")
+                extraction_metadata['patient_status'] = 'created'
+                
+        else:
+            # Create a placeholder patient if minimum info not available
+            logger.warning("Insufficient demographic information extracted, creating placeholder patient")
+            patient_id = str(uuid.uuid4())
+            current_time = datetime.utcnow()
+            
+            patient_record = {
+                "id": patient_id,
+                "first_name": "Unknown",
+                "last_name": "Patient",
+                "date_of_birth": "1900-01-01",
+                "phone_1": "000-000-0000",
+                "created_at": current_time.isoformat()
+            }
+            
+            response = supabase.table("patients").insert(patient_record).execute()
+            logger.info(f"Created placeholder patient with ID: {patient_id}")
+            extraction_metadata['patient_status'] = 'placeholder'
+            extraction_metadata['note'] = 'Insufficient demographic information extracted'
         
-        # Get public URL
-        public_url_response = supabase.storage.from_("recordings").get_public_url(storage_path)
-        public_url = public_url_response.data['publicUrl'] if public_url_response.data else None
+        # NOTE: File storage disabled by user request - only storing transcript and metadata
+        public_url = None
         
-        # Create recording record with clinical data
+        # Create recording record with required fields
         recording_id = str(uuid.uuid4())
         current_time = datetime.utcnow()
         
         recording_record = {
             "id": recording_id,
             "filename": unique_filename,
-            "original_filename": file.filename,
-            "url": public_url,
             "transcript": transcript,
             "summary": summary,
             "patient_id": patient_id,
-            "created_at": current_time.isoformat(),
-            # Add parsed clinical data
-            "chief_complaint": clinical_data.get('chief_complaint'),
-            "history_present_illness": clinical_data.get('history_present_illness'),
-            "past_medical_history": clinical_data.get('past_medical_history'),
-            "medications": clinical_data.get('medications'),
-            "allergies": clinical_data.get('allergies'),
-            "diagnosis": clinical_data.get('diagnosis'),
-            "plan": clinical_data.get('plan'),
-            "additional_notes": clinical_data.get('additional_notes')
+            "created_at": current_time.isoformat()
         }
         
         recording_response = supabase.table("recordings").insert(recording_record).execute()
         
-        if recording_response.error:
-            logger.error(f"Database insert failed: {recording_response.error}")
+        if not recording_response.data:
+            logger.error("Database insert failed: No data returned")
             raise HTTPException(status_code=500, detail="Failed to save recording record")
         
-        # Update patient record with extracted clinical and demographic data
-        if patient_id:  # If linked to a patient, update their record
+        # Update patient record with additional clinical data if available
+        if patient_id and clinical_data:
             patient_update = {}
             
-            # Add clinical data
+            # Add clinical data to patient record (only basic fields)
             if clinical_data.get('diagnosis'):
                 patient_update["diagnosis"] = clinical_data.get('diagnosis')
-            if clinical_data.get('additional_notes'):
-                patient_update["clinical_notes"] = clinical_data.get('additional_notes')
             if clinical_data.get('allergies'):
                 patient_update["allergies"] = clinical_data.get('allergies')
             if clinical_data.get('medications'):
                 patient_update["medications"] = clinical_data.get('medications')
             
-            # Get current patient data to check what's missing
-            current_patient = supabase.table("patients").select("*").eq("id", patient_id).execute()
-            
-            if current_patient.data:
-                patient_data = current_patient.data[0]
-                
-                # Add demographic data only if not already present in patient record
-                if not patient_data.get('occupation') and clinical_data.get('occupation'):
-                    patient_update["occupation"] = clinical_data.get('occupation')
-                
-                if not patient_data.get('education') and clinical_data.get('education'):
-                    patient_update["education"] = clinical_data.get('education')
-                
-                if not patient_data.get('marital_status') and clinical_data.get('marital_status'):
-                    patient_update["marital_status"] = clinical_data.get('marital_status')
-                
-                if not patient_data.get('children_count') and clinical_data.get('children_count'):
-                    if isinstance(clinical_data.get('children_count'), (int, float)):
-                        patient_update["children_count"] = int(clinical_data.get('children_count'))
-                
-                if patient_data.get('smoking') is None and clinical_data.get('smoking') is not None:
-                    patient_update["smoking"] = clinical_data.get('smoking')
-                
-                if not patient_data.get('country_of_birth') and clinical_data.get('country_of_birth'):
-                    patient_update["country_of_birth"] = clinical_data.get('country_of_birth')
-                
-                if not patient_data.get('city_of_birth') and clinical_data.get('city_of_birth'):
-                    patient_update["city_of_birth"] = clinical_data.get('city_of_birth')
-                
-                # Enhance address if current one is empty or very basic
-                if clinical_data.get('address') and (
-                    not patient_data.get('address') or 
-                    len(patient_data.get('address', '')) < 20
-                ):
-                    patient_update["address"] = clinical_data.get('address')
-            
             # Apply updates if any
             if patient_update:
                 update_response = supabase.table("patients").update(patient_update).eq("id", patient_id).execute()
-                logger.info(f"Enhanced patient record with extracted data: {list(patient_update.keys())}")
+                logger.info(f"Enhanced patient record with clinical data: {list(patient_update.keys())}")
         
         logger.info(f"Successfully created consultation for patient ID: {patient_id}")
         
@@ -1804,17 +1983,287 @@ async def create_new_patient_consultation(
             transcript=transcript,
             summary=summary,
             patient_id=patient_id,
-            created_at=current_time
+            created_at=current_time,
+            extraction_metadata=extraction_metadata
         )
         
-    except json.JSONDecodeError as e:
-        logger.error(f"Invalid patient data JSON: {str(e)}")
-        raise HTTPException(status_code=400, detail="Invalid patient data format")
     except Exception as e:
         logger.error(f"Failed to create patient consultation: {str(e)}")
         raise HTTPException(
             status_code=500, 
             detail=f"Failed to create patient consultation: {str(e)}"
+        )
+
+# ===============================
+# COMPREHENSIVE CLINICAL DATA ENDPOINTS
+# ===============================
+
+# Symptom Assessments
+@app.get("/patients/{patient_id}/symptom-assessments")
+async def get_patient_symptom_assessments(patient_id: str):
+    """Get all symptom assessments for a patient."""
+    try:
+        response = supabase.table("patient_symptom_assessments").select("*").eq("patient_id", patient_id).order("assessment_date", desc=True).execute()
+        return response.data
+    except Exception as e:
+        logger.error(f"Failed to get symptom assessments: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/patients/{patient_id}/symptom-assessments")
+async def create_symptom_assessment(patient_id: str, assessment_data: dict):
+    """Create a new symptom assessment."""
+    try:
+        assessment_data["patient_id"] = patient_id
+        response = supabase.table("patient_symptom_assessments").insert(assessment_data).execute()
+        if not response.data:
+            raise HTTPException(status_code=400, detail="Failed to create symptom assessment")
+        logger.info(f"Created symptom assessment for patient {patient_id}")
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Failed to create symptom assessment: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Biomarker Results
+@app.get("/patients/{patient_id}/biomarkers")
+async def get_patient_biomarkers(patient_id: str):
+    """Get all biomarker results for a patient."""
+    try:
+        response = supabase.table("patient_biomarkers").select("*").eq("patient_id", patient_id).order("test_date", desc=True).execute()
+        return response.data
+    except Exception as e:
+        logger.error(f"Failed to get biomarkers: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/patients/{patient_id}/biomarkers")
+async def create_biomarker(patient_id: str, biomarker_data: dict):
+    """Create a new biomarker result."""
+    try:
+        biomarker_data["patient_id"] = patient_id
+        response = supabase.table("patient_biomarkers").insert(biomarker_data).execute()
+        if not response.data:
+            raise HTTPException(status_code=400, detail="Failed to create biomarker result")
+        logger.info(f"Created biomarker result for patient {patient_id}")
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Failed to create biomarker: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Treatment Response & Toxicity
+@app.get("/patients/{patient_id}/treatment-responses")
+async def get_patient_treatment_responses(patient_id: str):
+    """Get all treatment responses for a patient."""
+    try:
+        response = supabase.table("patient_treatment_responses").select("*").eq("patient_id", patient_id).order("assessment_date", desc=True).execute()
+        return response.data
+    except Exception as e:
+        logger.error(f"Failed to get treatment responses: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/patients/{patient_id}/treatment-responses")
+async def create_treatment_response(patient_id: str, response_data: dict):
+    """Create a new treatment response assessment."""
+    try:
+        response_data["patient_id"] = patient_id
+        response = supabase.table("patient_treatment_responses").insert(response_data).execute()
+        if not response.data:
+            raise HTTPException(status_code=400, detail="Failed to create treatment response")
+        logger.info(f"Created treatment response for patient {patient_id}")
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Failed to create treatment response: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Risk Assessments
+@app.get("/patients/{patient_id}/risk-assessments")
+async def get_patient_risk_assessments(patient_id: str):
+    """Get all risk assessments for a patient."""
+    try:
+        response = supabase.table("patient_risk_assessments").select("*").eq("patient_id", patient_id).order("assessment_date", desc=True).execute()
+        return response.data
+    except Exception as e:
+        logger.error(f"Failed to get risk assessments: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/patients/{patient_id}/risk-assessments")
+async def create_risk_assessment(patient_id: str, risk_data: dict):
+    """Create a new risk assessment."""
+    try:
+        risk_data["patient_id"] = patient_id
+        response = supabase.table("patient_risk_assessments").insert(risk_data).execute()
+        if not response.data:
+            raise HTTPException(status_code=400, detail="Failed to create risk assessment")
+        logger.info(f"Created risk assessment for patient {patient_id}")
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Failed to create risk assessment: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Psychosocial Assessments
+@app.get("/patients/{patient_id}/psychosocial-assessments")
+async def get_patient_psychosocial_assessments(patient_id: str):
+    """Get all psychosocial assessments for a patient."""
+    try:
+        response = supabase.table("patient_psychosocial_assessments").select("*").eq("patient_id", patient_id).order("assessment_date", desc=True).execute()
+        return response.data
+    except Exception as e:
+        logger.error(f"Failed to get psychosocial assessments: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/patients/{patient_id}/psychosocial-assessments")
+async def create_psychosocial_assessment(patient_id: str, psychosocial_data: dict):
+    """Create a new psychosocial assessment."""
+    try:
+        psychosocial_data["patient_id"] = patient_id
+        response = supabase.table("patient_psychosocial_assessments").insert(psychosocial_data).execute()
+        if not response.data:
+            raise HTTPException(status_code=400, detail="Failed to create psychosocial assessment")
+        logger.info(f"Created psychosocial assessment for patient {patient_id}")
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Failed to create psychosocial assessment: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Clinical Trials
+@app.get("/patients/{patient_id}/clinical-trials")
+async def get_patient_clinical_trials(patient_id: str):
+    """Get all clinical trial information for a patient."""
+    try:
+        response = supabase.table("patient_clinical_trials").select("*").eq("patient_id", patient_id).order("created_at", desc=True).execute()
+        return response.data
+    except Exception as e:
+        logger.error(f"Failed to get clinical trials: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/patients/{patient_id}/clinical-trials")
+async def create_clinical_trial(patient_id: str, trial_data: dict):
+    """Create a new clinical trial record."""
+    try:
+        trial_data["patient_id"] = patient_id
+        response = supabase.table("patient_clinical_trials").insert(trial_data).execute()
+        if not response.data:
+            raise HTTPException(status_code=400, detail="Failed to create clinical trial record")
+        logger.info(f"Created clinical trial record for patient {patient_id}")
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Failed to create clinical trial: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Enhanced consultation processing with comprehensive data extraction
+@app.post("/consultation/comprehensive", response_model=UploadResponse)
+async def create_comprehensive_consultation(
+    file: UploadFile = File(...),
+    patient_id: str = Form(...)
+):
+    """Process consultation with comprehensive clinical data extraction."""
+    try:
+        logger.info("Creating comprehensive consultation with advanced extraction")
+        
+        # Process the file (audio/text/pdf)
+        file_content = await file.read()
+        file_extension = Path(file.filename).suffix
+        unique_filename = f"{uuid.uuid4()}{file_extension}"
+        
+        # Process based on file type
+        transcript = ""
+        if file.content_type and (file.content_type.startswith('audio/') or file.content_type.startswith('video/')):
+            transcript = await process_audio_file(file_content, unique_filename, file.content_type)
+        elif file.content_type == 'text/plain' or file_extension.lower() == '.txt':
+            transcript = file_content.decode('utf-8')
+        elif file.content_type == 'application/pdf' or file_extension.lower() == '.pdf':
+            transcript = await process_pdf_file(file_content, unique_filename)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported file type: {file.content_type}")
+        
+        # Generate summary
+        summary = await generate_consultation_summary(transcript)
+        
+        # Extract basic clinical data
+        basic_clinical_data = await parse_clinical_data_from_summary(summary)
+        
+        # Extract comprehensive clinical data
+        comprehensive_data = await extract_comprehensive_clinical_data(transcript, summary)
+        
+        # Create recording record
+        recording_id = str(uuid.uuid4())
+        current_time = datetime.utcnow()
+        
+        recording_record = {
+            "id": recording_id,
+            "filename": unique_filename,
+            "transcript": transcript,
+            "summary": summary,
+            "patient_id": patient_id,
+            "created_at": current_time.isoformat()
+        }
+        
+        recording_response = supabase.table("recordings").insert(recording_record).execute()
+        
+        if not recording_response.data:
+            raise HTTPException(status_code=500, detail="Failed to save recording record")
+        
+        # Store comprehensive clinical data in respective tables
+        stored_data = {}
+        
+        # Store symptom assessment if data exists
+        if comprehensive_data.get("symptom_assessment") and any(comprehensive_data["symptom_assessment"].values()):
+            symptom_data = comprehensive_data["symptom_assessment"].copy()
+            symptom_data.update({
+                "patient_id": patient_id,
+                "assessment_date": current_time.date().isoformat()
+            })
+            try:
+                symptom_response = supabase.table("patient_symptom_assessments").insert(symptom_data).execute()
+                stored_data["symptom_assessment"] = symptom_response.data[0] if symptom_response.data else None
+            except Exception as e:
+                logger.warning(f"Failed to store symptom assessment: {str(e)}")
+        
+        # Store biomarker results if data exists
+        if comprehensive_data.get("biomarker_results") and any(comprehensive_data["biomarker_results"].values()):
+            biomarker_data = comprehensive_data["biomarker_results"].copy()
+            biomarker_data.update({
+                "patient_id": patient_id,
+                "test_date": current_time.date().isoformat()
+            })
+            try:
+                biomarker_response = supabase.table("patient_biomarkers").insert(biomarker_data).execute()
+                stored_data["biomarker_results"] = biomarker_response.data[0] if biomarker_response.data else None
+            except Exception as e:
+                logger.warning(f"Failed to store biomarker results: {str(e)}")
+        
+        # Store risk assessment if data exists
+        if comprehensive_data.get("risk_assessment") and any(comprehensive_data["risk_assessment"].values()):
+            risk_data = comprehensive_data["risk_assessment"].copy()
+            risk_data.update({
+                "patient_id": patient_id,
+                "assessment_date": current_time.date().isoformat()
+            })
+            try:
+                risk_response = supabase.table("patient_risk_assessments").insert(risk_data).execute()
+                stored_data["risk_assessment"] = risk_response.data[0] if risk_response.data else None
+            except Exception as e:
+                logger.warning(f"Failed to store risk assessment: {str(e)}")
+        
+        logger.info(f"Comprehensive consultation created with extracted data: {list(stored_data.keys())}")
+        
+        return UploadResponse(
+            id=recording_id,
+            filename=file.filename,
+            transcript=transcript,
+            summary=summary,
+            patient_id=patient_id,
+            created_at=current_time,
+            extraction_metadata={
+                "basic_clinical": basic_clinical_data,
+                "comprehensive_clinical": comprehensive_data,
+                "stored_tables": list(stored_data.keys())
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to create comprehensive consultation: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to create comprehensive consultation: {str(e)}"
         )
 
 if __name__ == "__main__":
