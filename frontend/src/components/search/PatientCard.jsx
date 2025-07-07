@@ -38,71 +38,84 @@ export function PatientCard({ patient, matches = [], query }) {
     return 'bg-sage/60'
   }
 
-  // Highlight matched text with burgundy
-  const highlightMatches = (text, fieldName) => {
-    if (!query || !text) return text
-
-    // For patient names, check both first_name and last_name matches
-    if (fieldName === 'name') {
-      let highlighted = text
-      
-      // Find matches for first_name and last_name
-      const firstNameMatch = matches.find(m => m.key === 'first_name')
-      const lastNameMatch = matches.find(m => m.key === 'last_name')
-      
-      // Apply highlighting for first name matches
-      if (firstNameMatch && patient.first_name) {
-        firstNameMatch.indices.forEach(([start, end]) => {
-          const matchText = patient.first_name.substring(start, end + 1)
-          highlighted = highlighted.replace(
-            new RegExp(`(${escapeRegExp(matchText)})`, 'gi'),
-            '<span class="font-semibold text-burgundy">$1</span>'
-          )
-        })
-      }
-      
-      // Apply highlighting for last name matches
-      if (lastNameMatch && patient.last_name) {
-        lastNameMatch.indices.forEach(([start, end]) => {
-          const matchText = patient.last_name.substring(start, end + 1)
-          highlighted = highlighted.replace(
-            new RegExp(`(${escapeRegExp(matchText)})`, 'gi'),
-            '<span class="font-semibold text-burgundy">$1</span>'
-          )
-        })
-      }
-      
-      // Fallback: simple case-insensitive highlighting if no specific matches
-      if (!firstNameMatch && !lastNameMatch) {
-        const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi')
-        highlighted = highlighted.replace(regex, '<span class="font-semibold text-burgundy">$1</span>')
-      }
-      
-      return highlighted
+  // Create highlighted text as React elements
+  const createHighlightedText = (text, searchQuery) => {
+    if (!searchQuery || !text) {
+      return text
     }
 
-    // For other fields, use the original logic
-    const match = matches.find(m => m.key === fieldName)
-    if (!match) {
-      // Fallback: simple case-insensitive highlighting
-      const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi')
-      return text.replace(regex, '<span class="font-semibold text-burgundy">$1</span>')
-    }
+    const parts = []
+    const regex = new RegExp(`(${searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
+    let lastIndex = 0
+    let match
 
-    let highlighted = text
-    match.indices.forEach(([start, end]) => {
-      const matchText = text.substring(start, end + 1)
-      highlighted = highlighted.replace(
-        new RegExp(`(${escapeRegExp(matchText)})`, 'gi'),
-        `<span class="font-semibold text-burgundy">${matchText}</span>`
+    while ((match = regex.exec(text)) !== null) {
+      // Add text before match
+      if (match.index > lastIndex) {
+        parts.push(text.slice(lastIndex, match.index))
+      }
+      
+      // Add highlighted match
+      parts.push(
+        <span key={match.index} className="font-semibold text-burgundy">
+          {match[1]}
+        </span>
       )
-    })
-    return highlighted
+      
+      lastIndex = match.index + match[1].length
+    }
+    
+    // Add remaining text
+    if (lastIndex < text.length) {
+      parts.push(text.slice(lastIndex))
+    }
+    
+    return parts.length > 1 ? parts : text
   }
 
-  // Helper function to escape special regex characters
-  const escapeRegExp = (string) => {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  // Create highlighted name with better logic
+  const createHighlightedName = () => {
+    const fullName = `${patient.first_name || ''} ${patient.last_name || ''}`.trim()
+    
+    if (!query) {
+      return fullName
+    }
+
+    // Check if we have specific name matches from Fuse.js
+    const firstNameMatch = matches.find(m => m.key === 'first_name')
+    const lastNameMatch = matches.find(m => m.key === 'last_name')
+    
+    if (firstNameMatch || lastNameMatch) {
+      const parts = []
+      let firstName = patient.first_name || ''
+      let lastName = patient.last_name || ''
+      
+      // Highlight first name if matched
+      if (firstNameMatch && firstName) {
+        const highlightedFirst = createHighlightedText(firstName, query)
+        parts.push(highlightedFirst)
+      } else {
+        parts.push(firstName)
+      }
+      
+      // Add space if both names exist
+      if (firstName && lastName) {
+        parts.push(' ')
+      }
+      
+      // Highlight last name if matched
+      if (lastNameMatch && lastName) {
+        const highlightedLast = createHighlightedText(lastName, query)
+        parts.push(highlightedLast)
+      } else {
+        parts.push(lastName)
+      }
+      
+      return parts
+    }
+    
+    // Fallback: highlight full name
+    return createHighlightedText(fullName, query)
   }
 
   // Format next appointment
@@ -154,19 +167,13 @@ export function PatientCard({ patient, matches = [], query }) {
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between mb-2">
                 <div>
-                  <h3 
-                    className="text-lg font-semibold text-cacao group-hover:text-sage transition-colors duration-300"
-                    dangerouslySetInnerHTML={{
-                      __html: highlightMatches(`${patient.first_name || ''} ${patient.last_name || ''}`, 'name')
-                    }}
-                  />
+                  <h3 className="text-lg font-semibold text-cacao group-hover:text-sage transition-colors duration-300">
+                    {createHighlightedName()}
+                  </h3>
                   <div className="flex items-center gap-2 mt-1">
-                    <span 
-                      className="text-sm text-cacao/90"
-                      dangerouslySetInnerHTML={{
-                        __html: highlightMatches(patient.cancer_type || 'Cancer type not specified', 'condition')
-                      }}
-                    />
+                    <span className="text-sm text-cacao/90">
+                      {createHighlightedText(patient.cancer_type || 'Cancer type not specified', query)}
+                    </span>
                     {patient.cancer_stage && (
                       <>
                         <span className="text-cacao/40">•</span>
