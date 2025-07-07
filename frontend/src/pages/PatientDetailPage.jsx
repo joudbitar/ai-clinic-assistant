@@ -1,325 +1,334 @@
-import { useParams, useNavigate, Link } from 'react-router-dom'
-import { 
-  ArrowLeft, User, Calendar, Phone, FileText, History, 
-  Zap, Scissors, Pill, Target, MapPin, Briefcase, Heart, 
-  Users, Mail, IdCard, Cake, Globe, Activity, FlaskConical,
-  Dna, Scan, ClipboardList, Eye, ShieldAlert, Mic
-} from 'lucide-react'
-import { 
-  usePatient, 
-  usePatientHistories,
-  usePatientPreviousChemotherapy,
-  usePatientPreviousRadiotherapy,
-  usePatientPreviousSurgeries,
-  usePatientConcomitantMedications,
-  usePatientBaselines,
-  usePatientFollowups,
-  usePatientLabResults,
-  usePatientMolecularTests,
-  usePatientImagingStudies,
-  useAuditLogs,
-  usePatientRecordings
-} from '@/hooks/usePatients'
-import {
-  useUpdatePatient,
-  useCreatePatientHistory,
-  useUpdatePatientHistory,
-  useDeletePatientHistory,
-  useCreateChemotherapy,
-  useUpdateChemotherapy,
-  useDeleteChemotherapy,
-  useCreateRadiotherapy,
-  useUpdateRadiotherapy,
-  useDeleteRadiotherapy,
-  useCreateSurgery,
-  useUpdateSurgery,
-  useDeleteSurgery,
-  useCreateMedication,
-  useUpdateMedication,
-  useDeleteMedication,
-  useCreateBaseline,
-  useUpdateBaseline,
-  useDeleteBaseline,
-  useCreateFollowup,
-  useUpdateFollowup,
-  useDeleteFollowup,
-  useCreateLabResult,
-  useUpdateLabResult,
-  useDeleteLabResult,
-  useCreateMolecularTest,
-  useUpdateMolecularTest,
-  useDeleteMolecularTest,
-  useCreateImagingStudy,
-  useUpdateImagingStudy,
-  useDeleteImagingStudy
-} from '@/hooks/useMutations'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import React from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft, Edit, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { EditableField } from '@/components/EditableField'
-import { EditableTable } from '@/components/AddNewRowForm'
-import { ClinicalEditableTable } from '@/components/ClinicalEditableTable'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { useToast } from '@/hooks/useToast.jsx'
+import { EMRPatientHeader } from '@/components/EMRPatientHeader'
 import { 
-  patientFields, 
-  historyFields, 
-  chemotherapyFields, 
-  radiotherapyFields, 
-  surgeryFields, 
-  medicationFields,
-  baselineFields,
-  followupFields,
-  labResultFields,
-  molecularTestFields,
-  imagingStudyFields,
-  formatDate,
-  formatPhone
-} from '@/config/fieldConfigs'
+  DemographicsSection, 
+  HistorySection, 
+  MedicationsSection, 
+  BaselinesSection, 
+  ConsultationRecordsSection 
+} from '@/components/EMRClinicalSections'
 
 export default function PatientDetailPage() {
   const { patientId } = useParams()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const { toast } = useToast()
   
+  // API Base URL
+  const API_BASE_URL = "http://localhost:8000"
+
   // Fetch patient data
-  const { data: patient, isLoading: patientLoading, error: patientError } = usePatient(patientId)
-  const { data: histories, isLoading: historiesLoading } = usePatientHistories(patientId)
-  const { data: chemotherapy, isLoading: chemoLoading } = usePatientPreviousChemotherapy(patientId)
-  const { data: radiotherapy, isLoading: radioLoading } = usePatientPreviousRadiotherapy(patientId)
-  const { data: surgeries, isLoading: surgeriesLoading } = usePatientPreviousSurgeries(patientId)
-  const { data: medications, isLoading: medicationsLoading } = usePatientConcomitantMedications(patientId)
-  const { data: baselines, isLoading: baselinesLoading } = usePatientBaselines(patientId)
-  const { data: followups, isLoading: followupsLoading } = usePatientFollowups(patientId)
-  const { data: labResults, isLoading: labResultsLoading } = usePatientLabResults(patientId)
-  const { data: molecularTests, isLoading: molecularTestsLoading } = usePatientMolecularTests(patientId)
-  const { data: imagingStudies, isLoading: imagingStudiesLoading } = usePatientImagingStudies(patientId)
-  const { data: auditLogs, isLoading: auditLogsLoading } = useAuditLogs(patientId)
-  const { data: recordings, isLoading: recordingsLoading } = usePatientRecordings(patientId)
+  const { data: patient, isLoading: patientLoading, error: patientError } = useQuery({
+    queryKey: ['patient', patientId],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE_URL}/patients/${patientId}`)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch patient: ${response.status} ${response.statusText}`)
+      }
+      return response.json()
+    },
+    enabled: !!patientId
+  })
+  
+  const { data: histories, isLoading: historiesLoading } = useQuery({
+    queryKey: ['patient-histories', patientId],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE_URL}/patients/${patientId}/histories`)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch histories: ${response.status} ${response.statusText}`)
+      }
+      return response.json()
+    },
+    enabled: !!patientId
+  })
+  
+  const { data: chemotherapy, isLoading: chemoLoading } = useQuery({
+    queryKey: ['patient-chemotherapy', patientId],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE_URL}/patients/${patientId}/previous-chemotherapy`)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch chemotherapy: ${response.status} ${response.statusText}`)
+      }
+      return response.json()
+    },
+    enabled: !!patientId
+  })
+  
+  const { data: radiotherapy, isLoading: radioLoading } = useQuery({
+    queryKey: ['patient-radiotherapy', patientId],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE_URL}/patients/${patientId}/previous-radiotherapy`)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch radiotherapy: ${response.status} ${response.statusText}`)
+      }
+      return response.json()
+    },
+    enabled: !!patientId
+  })
+  
+  const { data: surgeries, isLoading: surgeriesLoading } = useQuery({
+    queryKey: ['patient-surgeries', patientId],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE_URL}/patients/${patientId}/previous-surgeries`)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch surgeries: ${response.status} ${response.statusText}`)
+      }
+      return response.json()
+    },
+    enabled: !!patientId
+  })
+  
+  const { data: medications, isLoading: medicationsLoading } = useQuery({
+    queryKey: ['patient-medications', patientId],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE_URL}/patients/${patientId}/concomitant-medications`)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch medications: ${response.status} ${response.statusText}`)
+      }
+      return response.json()
+    },
+    enabled: !!patientId
+  })
+  
+  const { data: baselines, isLoading: baselinesLoading } = useQuery({
+    queryKey: ['patient-baselines', patientId],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE_URL}/patients/${patientId}/baselines`)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch baselines: ${response.status} ${response.statusText}`)
+      }
+      return response.json()
+    },
+    enabled: !!patientId
+  })
+  
+  const { data: recordings, isLoading: recordingsLoading } = useQuery({
+    queryKey: ['patient-recordings', patientId],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE_URL}/patients/${patientId}/recordings`)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch recordings: ${response.status} ${response.statusText}`)
+      }
+      return response.json()
+    },
+    enabled: !!patientId
+  })
 
-  // Mutations
-  const createHistoryMutation = useCreatePatientHistory()
-  const updateHistoryMutation = useUpdatePatientHistory()
-  const deleteHistoryMutation = useDeletePatientHistory()
-  const createChemoMutation = useCreateChemotherapy()
-  const updateChemoMutation = useUpdateChemotherapy()
-  const deleteChemoMutation = useDeleteChemotherapy()
-  const createRadioMutation = useCreateRadiotherapy()
-  const updateRadioMutation = useUpdateRadiotherapy()
-  const deleteRadioMutation = useDeleteRadiotherapy()
-  const createSurgeryMutation = useCreateSurgery()
-  const updateSurgeryMutation = useUpdateSurgery()
-  const deleteSurgeryMutation = useDeleteSurgery()
-  const createMedicationMutation = useCreateMedication()
-  const updateMedicationMutation = useUpdateMedication()
-  const deleteMedicationMutation = useDeleteMedication()
-  const createBaselineMutation = useCreateBaseline()
-  const updateBaselineMutation = useUpdateBaseline()
-  const deleteBaselineMutation = useDeleteBaseline()
-  const createFollowupMutation = useCreateFollowup()
-  const updateFollowupMutation = useUpdateFollowup()
-  const deleteFollowupMutation = useDeleteFollowup()
-  const createLabResultMutation = useCreateLabResult()
-  const updateLabResultMutation = useUpdateLabResult()
-  const deleteLabResultMutation = useDeleteLabResult()
-  const createMolecularTestMutation = useCreateMolecularTest()
-  const updateMolecularTestMutation = useUpdateMolecularTest()
-  const deleteMolecularTestMutation = useDeleteMolecularTest()
-  const createImagingStudyMutation = useCreateImagingStudy()
-  const updateImagingStudyMutation = useUpdateImagingStudy()
-  const deleteImagingStudyMutation = useDeleteImagingStudy()
-
-  const calculateAge = (dateOfBirth) => {
-    if (!dateOfBirth) return 'N/A'
-    const birth = new Date(dateOfBirth)
-    const today = new Date()
-    let age = today.getFullYear() - birth.getFullYear()
-    const monthDiff = today.getMonth() - birth.getMonth()
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-      age--
+  // Mutations with generic handlers
+  const createMutation = useMutation({
+    mutationFn: async ({ endpoint, data }) => {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      })
+      if (!response.ok) {
+        throw new Error('Failed to create item')
+      }
+      return response.json()
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: [variables.queryKey, patientId] })
+      toast.success('Item created successfully')
+    },
+    onError: (error) => {
+      toast.error('Failed to create item: ' + error.message)
     }
-    return age
-  }
+  })
 
-  // Validation functions
-  const validateEmail = (email) => {
-    if (!email) return null
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    return emailRegex.test(email) ? null : 'Please enter a valid email address'
-  }
+  const updateMutation = useMutation({
+    mutationFn: async ({ endpoint, data }) => {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      })
+      if (!response.ok) {
+        throw new Error('Failed to update item')
+      }
+      return response.json()
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: [variables.queryKey, patientId] })
+      toast.success('Item updated successfully')
+    },
+    onError: (error) => {
+      toast.error('Failed to update item: ' + error.message)
+    }
+  })
 
-  const validatePhone = (phone) => {
-    if (!phone) return null
-    const cleaned = phone.replace(/\D/g, '')
-    return cleaned.length >= 10 ? null : 'Please enter a valid phone number'
-  }
+  const deleteMutation = useMutation({
+    mutationFn: async ({ endpoint }) => {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'DELETE',
+      })
+      if (!response.ok) {
+        throw new Error('Failed to delete item')
+      }
+      return response.json()
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: [variables.queryKey, patientId] })
+      toast.success('Item deleted successfully')
+    },
+    onError: (error) => {
+      toast.error('Failed to delete item: ' + error.message)
+    }
+  })
 
-  const validateRequired = (value) => {
-    return value && value.trim() ? null : 'This field is required'
-  }
+
 
   // Handle table operations
   const handleCreateHistory = async (historyData) => {
-    await createHistoryMutation.mutateAsync({ patientId, historyData })
+    await createMutation.mutateAsync({ 
+      endpoint: `/patients/${patientId}/histories`, 
+      data: historyData,
+      queryKey: 'patient-histories'
+    })
   }
 
   const handleUpdateHistory = async (updatedData) => {
-    await updateHistoryMutation.mutateAsync({ 
-      historyId: updatedData.id, 
-      field: 'all', 
-      value: updatedData 
+    await updateMutation.mutateAsync({ 
+      endpoint: `/histories/${updatedData.id}`,
+      data: updatedData,
+      queryKey: 'patient-histories'
     })
   }
 
   const handleDeleteHistory = async (historyId) => {
-    await deleteHistoryMutation.mutateAsync({ historyId, patientId })
+    await deleteMutation.mutateAsync({ 
+      endpoint: `/histories/${historyId}`,
+      queryKey: 'patient-histories'
+    })
   }
 
   const handleCreateChemotherapy = async (chemoData) => {
-    await createChemoMutation.mutateAsync({ patientId, chemoData })
+    await createMutation.mutateAsync({ 
+      endpoint: `/patients/${patientId}/previous-chemotherapy`, 
+      data: chemoData,
+      queryKey: 'patient-chemotherapy'
+    })
   }
 
   const handleUpdateChemotherapy = async (updatedData) => {
-    await updateChemoMutation.mutateAsync({ 
-      chemoId: updatedData.id, 
-      field: 'all', 
-      value: updatedData 
+    await updateMutation.mutateAsync({ 
+      endpoint: `/chemotherapy/${updatedData.id}`,
+      data: updatedData,
+      queryKey: 'patient-chemotherapy'
     })
   }
 
   const handleDeleteChemotherapy = async (chemoId) => {
-    await deleteChemoMutation.mutateAsync({ chemoId, patientId })
+    await deleteMutation.mutateAsync({ 
+      endpoint: `/chemotherapy/${chemoId}`,
+      queryKey: 'patient-chemotherapy'
+    })
   }
 
   const handleCreateRadiotherapy = async (radioData) => {
-    await createRadioMutation.mutateAsync({ patientId, radioData })
+    await createMutation.mutateAsync({ 
+      endpoint: `/patients/${patientId}/previous-radiotherapy`, 
+      data: radioData,
+      queryKey: 'patient-radiotherapy'
+    })
   }
 
   const handleUpdateRadiotherapy = async (updatedData) => {
-    await updateRadioMutation.mutateAsync({ 
-      radioId: updatedData.id, 
-      field: 'all', 
-      value: updatedData 
+    await updateMutation.mutateAsync({ 
+      endpoint: `/radiotherapy/${updatedData.id}`,
+      data: updatedData,
+      queryKey: 'patient-radiotherapy'
     })
   }
 
   const handleDeleteRadiotherapy = async (radioId) => {
-    await deleteRadioMutation.mutateAsync({ radioId, patientId })
+    await deleteMutation.mutateAsync({ 
+      endpoint: `/radiotherapy/${radioId}`,
+      queryKey: 'patient-radiotherapy'
+    })
   }
 
   const handleCreateSurgery = async (surgeryData) => {
-    await createSurgeryMutation.mutateAsync({ patientId, surgeryData })
+    await createMutation.mutateAsync({ 
+      endpoint: `/patients/${patientId}/previous-surgeries`, 
+      data: surgeryData,
+      queryKey: 'patient-surgeries'
+    })
   }
 
   const handleUpdateSurgery = async (updatedData) => {
-    await updateSurgeryMutation.mutateAsync({ 
-      surgeryId: updatedData.id, 
-      field: 'all', 
-      value: updatedData 
+    await updateMutation.mutateAsync({ 
+      endpoint: `/surgeries/${updatedData.id}`,
+      data: updatedData,
+      queryKey: 'patient-surgeries'
     })
   }
 
   const handleDeleteSurgery = async (surgeryId) => {
-    await deleteSurgeryMutation.mutateAsync({ surgeryId, patientId })
+    await deleteMutation.mutateAsync({ 
+      endpoint: `/surgeries/${surgeryId}`,
+      queryKey: 'patient-surgeries'
+    })
   }
 
   const handleCreateMedication = async (medicationData) => {
-    await createMedicationMutation.mutateAsync({ patientId, medicationData })
+    await createMutation.mutateAsync({ 
+      endpoint: `/patients/${patientId}/concomitant-medications`, 
+      data: medicationData,
+      queryKey: 'patient-medications'
+    })
   }
 
   const handleUpdateMedication = async (updatedData) => {
-    await updateMedicationMutation.mutateAsync({ 
-      medicationId: updatedData.id, 
-      field: 'all', 
-      value: updatedData 
+    await updateMutation.mutateAsync({ 
+      endpoint: `/medications/${updatedData.id}`,
+      data: updatedData,
+      queryKey: 'patient-medications'
     })
   }
 
   const handleDeleteMedication = async (medicationId) => {
-    await deleteMedicationMutation.mutateAsync({ medicationId, patientId })
+    await deleteMutation.mutateAsync({ 
+      endpoint: `/medications/${medicationId}`,
+      queryKey: 'patient-medications'
+    })
   }
 
   const handleCreateBaseline = async (baselineData) => {
-    await createBaselineMutation.mutateAsync({ patientId, baselineData })
+    await createMutation.mutateAsync({ 
+      endpoint: `/patients/${patientId}/baselines`, 
+      data: baselineData,
+      queryKey: 'patient-baselines'
+    })
   }
 
   const handleUpdateBaseline = async (updatedData) => {
-    await updateBaselineMutation.mutateAsync({ 
-      baselineId: updatedData.id, 
-      field: 'all', 
-      value: updatedData 
+    await updateMutation.mutateAsync({ 
+      endpoint: `/baselines/${updatedData.id}`,
+      data: updatedData,
+      queryKey: 'patient-baselines'
     })
   }
 
   const handleDeleteBaseline = async (baselineId) => {
-    await deleteBaselineMutation.mutateAsync({ baselineId, patientId })
-  }
-
-  const handleCreateFollowup = async (followupData) => {
-    await createFollowupMutation.mutateAsync({ patientId, followupData })
-  }
-
-  const handleUpdateFollowup = async (updatedData) => {
-    await updateFollowupMutation.mutateAsync({ 
-      followupId: updatedData.id, 
-      field: 'all', 
-      value: updatedData 
+    await deleteMutation.mutateAsync({ 
+      endpoint: `/baselines/${baselineId}`,
+      queryKey: 'patient-baselines'
     })
   }
 
-  const handleDeleteFollowup = async (followupId) => {
-    await deleteFollowupMutation.mutateAsync({ followupId, patientId })
-  }
 
-  const handleCreateLabResult = async (labData) => {
-    await createLabResultMutation.mutateAsync({ patientId, labData })
-  }
-
-  const handleUpdateLabResult = async (updatedData) => {
-    await updateLabResultMutation.mutateAsync({ 
-      labId: updatedData.id, 
-      field: 'all', 
-      value: updatedData 
-    })
-  }
-
-  const handleDeleteLabResult = async (labId) => {
-    await deleteLabResultMutation.mutateAsync({ labId, patientId })
-  }
-
-  const handleCreateMolecularTest = async (testData) => {
-    await createMolecularTestMutation.mutateAsync({ patientId, testData })
-  }
-
-  const handleUpdateMolecularTest = async (updatedData) => {
-    await updateMolecularTestMutation.mutateAsync({ 
-      testId: updatedData.id, 
-      field: 'all', 
-      value: updatedData 
-    })
-  }
-
-  const handleDeleteMolecularTest = async (testId) => {
-    await deleteMolecularTestMutation.mutateAsync({ testId, patientId })
-  }
-
-  const handleCreateImagingStudy = async (imagingData) => {
-    await createImagingStudyMutation.mutateAsync({ patientId, imagingData })
-  }
-
-  const handleUpdateImagingStudy = async (updatedData) => {
-    await updateImagingStudyMutation.mutateAsync({ 
-      imagingId: updatedData.id, 
-      field: 'all', 
-      value: updatedData 
-    })
-  }
-
-  const handleDeleteImagingStudy = async (imagingId) => {
-    await deleteImagingStudyMutation.mutateAsync({ imagingId, patientId })
-  }
 
   if (patientError) {
     return (
@@ -335,716 +344,136 @@ export default function PatientDetailPage() {
   }
 
   return (
-    <div className="container mx-auto p-6">
+    <div className="w-full px-2">
       {/* Header */}
-      <div className="mb-6">
-        <Button 
-          variant="ghost" 
-          onClick={() => navigate('/patients')}
-          className="mb-4"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Patients
-        </Button>
-        
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">
-              {patientLoading ? <Skeleton className="h-9 w-48" /> : 
-                `${patient?.first_name || ''} ${patient?.last_name || ''}`.trim() || 'N/A'
-              }
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              {patientLoading ? (
-                <Skeleton className="h-5 w-32" />
-              ) : (
-                `Age ${calculateAge(patient?.date_of_birth)} • Patient since ${formatDate(patient?.created_at)}`
-              )}
-            </p>
-          </div>
-          <div className="flex items-center space-x-3">
-            <Link to={`/record?patientId=${patientId}`}>
-              <Button variant="default" size="sm">
-                <Mic className="h-4 w-4 mr-2" />
-                Record Consultation
-              </Button>
-            </Link>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <ShieldAlert className="h-4 w-4 mr-2" />
-                  Audit Log
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Audit Log</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-3">
-                  {auditLogsLoading ? (
-                    <div className="space-y-3">
-                      {[...Array(5)].map((_, i) => (
-                        <Skeleton key={i} className="h-16 w-full" />
-                      ))}
-                    </div>
-                  ) : auditLogs && auditLogs.length > 0 ? (
-                    auditLogs.map((log, index) => (
-                      <div key={log.id || index} className="border rounded p-3">
-                        <div className="flex justify-between items-start mb-2">
-                          <span className="font-medium">{log.action}</span>
-                          <span className="text-sm text-muted-foreground">
-                            {formatDate(log.created_at)}
-                          </span>
-                        </div>
-                        <p className="text-sm text-muted-foreground">{log.details}</p>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-muted-foreground">No audit logs available</p>
-                  )}
-                </div>
-              </DialogContent>
-            </Dialog>
-            <div className="text-sm text-muted-foreground">
-              Click any field to edit
-            </div>
-          </div>
+      <div className="flex items-center justify-between mb-4 px-4 py-2 bg-white border-b">
+        <div className="flex items-center space-x-4">
+          <Button 
+            variant="ghost" 
+            onClick={() => navigate('/patients')}
+            className="flex items-center space-x-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Back to Patients</span>
+          </Button>
+          <h1 className="text-xl font-semibold">Patient Details</h1>
+        </div>
+        <div className="flex items-center space-x-3">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => navigate(`/record?patientId=${patientId}`)}
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            Record Consultation
+          </Button>
+          <Button variant="outline" size="sm">
+            <Edit className="h-4 w-4 mr-2" />
+            Edit Patient
+          </Button>
         </div>
       </div>
 
-      {/* Patient Overview Card */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <User className="h-5 w-5" />
-            Patient Overview
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {patientLoading ? (
-            <div className="grid gap-4 md:grid-cols-3">
-              {[...Array(3)].map((_, i) => (
-                <div key={i}>
-                  <Skeleton className="h-4 w-16 mb-2" />
-                  <Skeleton className="h-6 w-24" />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="grid gap-6 md:grid-cols-3">
-              <div className="flex items-center gap-3">
-                <Calendar className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Date of Birth</p>
-                  <p className="font-medium">{formatDate(patient?.date_of_birth)}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <Phone className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Phone</p>
-                  <p className="font-medium">{formatPhone(patient?.phone_1 || patient?.phone)}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <FileText className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Patient ID</p>
-                  <p className="font-medium text-xs">{patient?.id}</p>
-                </div>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* EMR Patient Header */}
+      <div className="px-4 mb-4">
+        <EMRPatientHeader 
+          patient={patient}
+          baselines={baselines}
+          histories={histories}
+          followups={[]} // Add followups when available
+          isLoading={patientLoading}
+        />
+      </div>
 
-      {/* Main Content Tabs */}
-      <Tabs defaultValue="demographics" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-8">
-          <TabsTrigger value="demographics">Demographics</TabsTrigger>
-          <TabsTrigger value="history">History</TabsTrigger>
-          <TabsTrigger value="treatments">Treatments</TabsTrigger>
-          <TabsTrigger value="medications">Medications</TabsTrigger>
-          <TabsTrigger value="baselines">Baselines</TabsTrigger>
-          <TabsTrigger value="followups">Follow-ups</TabsTrigger>
-          <TabsTrigger value="tests">Tests & Imaging</TabsTrigger>
-          <TabsTrigger value="recordings">Records</TabsTrigger>
-        </TabsList>
+      {/* Tabs */}
+      <div className="px-4">
+        <Tabs defaultValue="demographics" className="space-y-4">
+          <TabsList className="grid w-full grid-cols-5 h-12">
+            <TabsTrigger value="demographics" className="text-sm">Demographics</TabsTrigger>
+            <TabsTrigger value="history" className="text-sm">History</TabsTrigger>
+            <TabsTrigger value="medications" className="text-sm">Medications</TabsTrigger>
+            <TabsTrigger value="baselines" className="text-sm">Baselines</TabsTrigger>
+            <TabsTrigger value="recordings" className="text-sm">Recordings</TabsTrigger>
+          </TabsList>
 
-        {/* Demographics Tab */}
-        <TabsContent value="demographics">
-          <div className="space-y-6">
-            {/* Personal Information */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Personal Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {patientLoading ? (
-                  <div className="grid gap-6 md:grid-cols-2">
-                    {[...Array(6)].map((_, i) => (
-                      <div key={i} className="flex items-center gap-3">
-                        <Skeleton className="h-5 w-5" />
-                        <div className="flex-1">
-                          <Skeleton className="h-4 w-20 mb-1" />
-                          <Skeleton className="h-5 w-32" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="grid gap-6 md:grid-cols-2">
-                    {patientFields.demographics.map((field) => (
-                      <div key={field.key} className="flex items-center gap-3">
-                        <User className="h-5 w-5 text-muted-foreground" />
-                        <div className="flex-1">
-                          <p className="text-sm text-muted-foreground mb-1">{field.label}</p>
-                          <EditableField
-                            value={patient?.[field.key]}
-                            patientId={patientId}
-                            field={field.key}
-                            type={field.type}
-                            options={field.options}
-                            badge={field.type === 'select'}
-                            placeholder={`Enter ${field.label.toLowerCase()}`}
-                            validate={field.required ? validateRequired : null}
-                            formatDisplay={field.key === 'date_of_birth' ? formatDate : null}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+          {/* Demographics Tab */}
+          <TabsContent value="demographics">
+            <DemographicsSection
+              patient={patient}
+              patientId={patientId}
+              isLoading={patientLoading}
+            />
+          </TabsContent>
 
-            {/* Contact Information */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Phone className="h-5 w-5" />
-                  Contact Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {patientLoading ? (
-                  <div className="grid gap-6 md:grid-cols-2">
-                    {[...Array(4)].map((_, i) => (
-                      <div key={i} className="flex items-center gap-3">
-                        <Skeleton className="h-5 w-5" />
-                        <div className="flex-1">
-                          <Skeleton className="h-4 w-20 mb-1" />
-                          <Skeleton className="h-5 w-32" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="grid gap-6 md:grid-cols-2">
-                    {patientFields.contact.map((field) => (
-                      <div key={field.key} className="flex items-center gap-3">
-                        <Phone className="h-5 w-5 text-muted-foreground" />
-                        <div className="flex-1">
-                          <p className="text-sm text-muted-foreground mb-1">{field.label}</p>
-                          <EditableField
-                            value={patient?.[field.key]}
-                            patientId={patientId}
-                            field={field.key}
-                            type={field.type}
-                            placeholder={`Enter ${field.label.toLowerCase()}`}
-                            validate={field.type === 'email' ? validateEmail : field.type === 'tel' ? validatePhone : null}
-                            formatDisplay={field.type === 'tel' ? formatPhone : null}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+          {/* History Tab */}
+          <TabsContent value="history">
+            <HistorySection
+              histories={histories}
+              chemotherapy={chemotherapy}
+              radiotherapy={radiotherapy}
+              surgeries={surgeries}
+              otherTreatments={[]}
+              baselines={baselines}
+              followups={[]}
+              historyHandlers={{
+                onCreate: handleCreateHistory,
+                onUpdate: handleUpdateHistory,
+                onDelete: handleDeleteHistory
+              }}
+              treatmentHandlers={{
+                onCreateChemotherapy: handleCreateChemotherapy,
+                onUpdateChemotherapy: handleUpdateChemotherapy,
+                onDeleteChemotherapy: handleDeleteChemotherapy,
+                onCreateRadiotherapy: handleCreateRadiotherapy,
+                onUpdateRadiotherapy: handleUpdateRadiotherapy,
+                onDeleteRadiotherapy: handleDeleteRadiotherapy,
+                onCreateSurgery: handleCreateSurgery,
+                onUpdateSurgery: handleUpdateSurgery,
+                onDeleteSurgery: handleDeleteSurgery
+              }}
+              isLoading={historiesLoading || chemoLoading || radioLoading || surgeriesLoading}
+            />
+          </TabsContent>
 
-            {/* Background Information */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Globe className="h-5 w-5" />
-                  Background Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {patientLoading ? (
-                  <div className="grid gap-6 md:grid-cols-2">
-                    {[...Array(5)].map((_, i) => (
-                      <div key={i} className="flex items-center gap-3">
-                        <Skeleton className="h-5 w-5" />
-                        <div className="flex-1">
-                          <Skeleton className="h-4 w-20 mb-1" />
-                          <Skeleton className="h-5 w-32" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="grid gap-6 md:grid-cols-2">
-                    {patientFields.background.map((field) => (
-                      <div key={field.key} className="flex items-center gap-3">
-                        <Briefcase className="h-5 w-5 text-muted-foreground" />
-                        <div className="flex-1">
-                          <p className="text-sm text-muted-foreground mb-1">{field.label}</p>
-                          <EditableField
-                            value={patient?.[field.key]}
-                            patientId={patientId}
-                            field={field.key}
-                            type={field.type}
-                            placeholder={`Enter ${field.label.toLowerCase()}`}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+          {/* Medications Tab */}
+          <TabsContent value="medications">
+            <MedicationsSection
+              medications={medications}
+              medicationHandlers={{
+                onCreate: handleCreateMedication,
+                onUpdate: handleUpdateMedication,
+                onDelete: handleDeleteMedication
+              }}
+              isLoading={medicationsLoading}
+            />
+          </TabsContent>
 
-            {/* Medical Information */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Heart className="h-5 w-5" />
-                  Medical Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {patientLoading ? (
-                  <div className="grid gap-6 md:grid-cols-2">
-                    {[...Array(2)].map((_, i) => (
-                      <div key={i} className="flex items-center gap-3">
-                        <Skeleton className="h-5 w-5" />
-                        <div className="flex-1">
-                          <Skeleton className="h-4 w-20 mb-1" />
-                          <Skeleton className="h-5 w-32" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="grid gap-6 md:grid-cols-2">
-                    {patientFields.medical.map((field) => (
-                      <div key={field.key} className="flex items-center gap-3">
-                        <Heart className="h-5 w-5 text-muted-foreground" />
-                        <div className="flex-1">
-                          <p className="text-sm text-muted-foreground mb-1">{field.label}</p>
-                          <EditableField
-                            value={patient?.[field.key]}
-                            patientId={patientId}
-                            field={field.key}
-                            type={field.type}
-                            placeholder={`Enter ${field.label.toLowerCase()}`}
-                            validate={field.type === 'tel' ? validatePhone : null}
-                            formatDisplay={field.type === 'tel' ? formatPhone : null}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
+          {/* Baselines Tab */}
+          <TabsContent value="baselines">
+            <BaselinesSection
+              baselines={baselines}
+              baselineHandlers={{
+                onCreate: handleCreateBaseline,
+                onUpdate: handleUpdateBaseline,
+                onDelete: handleDeleteBaseline
+              }}
+              isLoading={baselinesLoading}
+            />
+          </TabsContent>
 
-        {/* History Tab */}
-        <TabsContent value="history">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <History className="h-5 w-5" />
-                Patient History & Risk Factors
-                {histories?.length > 0 && (
-                  <Badge variant="secondary">{histories.length}</Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {historiesLoading ? (
-                <div className="space-y-4">
-                  {[...Array(3)].map((_, i) => (
-                    <Skeleton key={i} className="h-20 w-full" />
-                  ))}
-                </div>
-              ) : (
-                <ClinicalEditableTable
-                  data={histories}
-                  fields={historyFields}
-                  onUpdate={handleUpdateHistory}
-                  onDelete={handleDeleteHistory}
-                  onCreate={handleCreateHistory}
-                  title="History"
-                  emptyMessage="No patient history recorded yet."
-                  dataType="history"
-                />
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Treatments Tab */}
-        <TabsContent value="treatments">
-          <div className="space-y-6">
-            {/* Previous Chemotherapy */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Zap className="h-5 w-5" />
-                  Previous Chemotherapy
-                  <Badge variant="secondary">{chemotherapy?.length || 0}</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {chemoLoading ? (
-                  <Skeleton className="h-16 w-full" />
-                ) : (
-                  <EditableTable
-                    data={chemotherapy}
-                    fields={chemotherapyFields}
-                    onUpdate={handleUpdateChemotherapy}
-                    onDelete={handleDeleteChemotherapy}
-                    onCreate={handleCreateChemotherapy}
-                    title="Chemotherapy"
-                    emptyMessage="No previous chemotherapy recorded."
-                  />
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Previous Radiotherapy */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Activity className="h-5 w-5" />
-                  Previous Radiotherapy
-                  <Badge variant="secondary">{radiotherapy?.length || 0}</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {radioLoading ? (
-                  <Skeleton className="h-16 w-full" />
-                ) : (
-                  <EditableTable
-                    data={radiotherapy}
-                    fields={radiotherapyFields}
-                    onUpdate={handleUpdateRadiotherapy}
-                    onDelete={handleDeleteRadiotherapy}
-                    onCreate={handleCreateRadiotherapy}
-                    title="Radiotherapy"
-                    emptyMessage="No previous radiotherapy recorded."
-                  />
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Previous Surgeries */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Scissors className="h-5 w-5" />
-                  Previous Surgeries
-                  <Badge variant="secondary">{surgeries?.length || 0}</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {surgeriesLoading ? (
-                  <Skeleton className="h-16 w-full" />
-                ) : (
-                  <EditableTable
-                    data={surgeries}
-                    fields={surgeryFields}
-                    onUpdate={handleUpdateSurgery}
-                    onDelete={handleDeleteSurgery}
-                    onCreate={handleCreateSurgery}
-                    title="Surgery"
-                    emptyMessage="No previous surgeries recorded."
-                  />
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        {/* Medications Tab */}
-        <TabsContent value="medications">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Pill className="h-5 w-5" />
-                Concomitant Medications
-                <Badge variant="secondary">{medications?.length || 0}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {medicationsLoading ? (
-                <div className="space-y-4">
-                  {[...Array(3)].map((_, i) => (
-                    <Skeleton key={i} className="h-20 w-full" />
-                  ))}
-                </div>
-              ) : (
-                <EditableTable
-                  data={medications}
-                  fields={medicationFields}
-                  onUpdate={handleUpdateMedication}
-                  onDelete={handleDeleteMedication}
-                  onCreate={handleCreateMedication}
-                  title="Medication"
-                  emptyMessage="No concomitant medications recorded."
-                />
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Baselines Tab */}
-        <TabsContent value="baselines">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Target className="h-5 w-5" />
-                Patient Baselines
-                <Badge variant="secondary">{baselines?.length || 0}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {baselinesLoading ? (
-                <div className="space-y-4">
-                  {[...Array(3)].map((_, i) => (
-                    <Skeleton key={i} className="h-20 w-full" />
-                  ))}
-                </div>
-              ) : (
-                <ClinicalEditableTable
-                  data={baselines}
-                  fields={baselineFields}
-                  onUpdate={handleUpdateBaseline}
-                  onDelete={handleDeleteBaseline}
-                  onCreate={handleCreateBaseline}
-                  title="Baseline"
-                  emptyMessage="No baselines recorded."
-                  dataType="baseline"
-                />
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Follow-ups Tab */}
-        <TabsContent value="followups">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ClipboardList className="h-5 w-5" />
-                Follow-up Visits
-                <Badge variant="secondary">{followups?.length || 0}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {followupsLoading ? (
-                <div className="space-y-4">
-                  {[...Array(3)].map((_, i) => (
-                    <Skeleton key={i} className="h-20 w-full" />
-                  ))}
-                </div>
-              ) : (
-                <ClinicalEditableTable
-                  data={followups}
-                  fields={followupFields}
-                  onUpdate={handleUpdateFollowup}
-                  onDelete={handleDeleteFollowup}
-                  onCreate={handleCreateFollowup}
-                  title="Follow-up"
-                  emptyMessage="No follow-up visits recorded."
-                  dataType="followup"
-                />
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Tests & Imaging Tab */}
-        <TabsContent value="tests">
-          <div className="space-y-6">
-            {/* Lab Results */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FlaskConical className="h-5 w-5" />
-                  Laboratory Results
-                  <Badge variant="secondary">{labResults?.length || 0}</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {labResultsLoading ? (
-                  <Skeleton className="h-16 w-full" />
-                ) : (
-                  <EditableTable
-                    data={labResults}
-                    fields={labResultFields}
-                    onUpdate={handleUpdateLabResult}
-                    onDelete={handleDeleteLabResult}
-                    onCreate={handleCreateLabResult}
-                    title="Lab Result"
-                    emptyMessage="No lab results recorded."
-                  />
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Molecular Tests */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Dna className="h-5 w-5" />
-                  Molecular Tests
-                  <Badge variant="secondary">{molecularTests?.length || 0}</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {molecularTestsLoading ? (
-                  <Skeleton className="h-16 w-full" />
-                ) : (
-                  <EditableTable
-                    data={molecularTests}
-                    fields={molecularTestFields}
-                    onUpdate={handleUpdateMolecularTest}
-                    onDelete={handleDeleteMolecularTest}
-                    onCreate={handleCreateMolecularTest}
-                    title="Molecular Test"
-                    emptyMessage="No molecular tests recorded."
-                  />
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Imaging Studies */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Scan className="h-5 w-5" />
-                  Imaging Studies
-                  <Badge variant="secondary">{imagingStudies?.length || 0}</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {imagingStudiesLoading ? (
-                  <Skeleton className="h-16 w-full" />
-                ) : (
-                  <EditableTable
-                    data={imagingStudies}
-                    fields={imagingStudyFields}
-                    onUpdate={handleUpdateImagingStudy}
-                    onDelete={handleDeleteImagingStudy}
-                    onCreate={handleCreateImagingStudy}
-                    title="Imaging Study"
-                    emptyMessage="No imaging studies recorded."
-                  />
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        {/* Recordings Tab */}
-        <TabsContent value="recordings">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Mic className="h-5 w-5" />
-                Audio Recordings & Transcripts
-                <Badge variant="secondary">{recordings?.length || 0}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {recordingsLoading ? (
-                <div className="space-y-4">
-                  {[...Array(3)].map((_, i) => (
-                    <Skeleton key={i} className="h-32 w-full" />
-                  ))}
-                </div>
-              ) : recordings && recordings.length > 0 ? (
-                <div className="space-y-4">
-                  {recordings.map((recording) => (
-                    <div key={recording.id} className="border rounded-lg p-4 hover:bg-gray-50">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-gray-500" />
-                          <span className="font-medium">{recording.filename || 'Audio Recording'}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-gray-500">
-                            {formatDate(recording.created_at)}
-                          </span>
-                          <Link
-                            to={`/recordings/${recording.id}`}
-                            className="text-blue-600 hover:text-blue-800 text-sm"
-                          >
-                            View Details
-                          </Link>
-                        </div>
-                      </div>
-                      
-                      {/* AI Summary Section */}
-                      {recording.summary && (
-                        <div className="mt-3 p-3 bg-blue-50 rounded-md border border-blue-200">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Badge variant="secondary" className="bg-blue-100 text-blue-800">
-                              AI Summary
-                            </Badge>
-                          </div>
-                          <div className="text-sm text-blue-900 whitespace-pre-wrap">
-                            {recording.summary}
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* Transcript Section */}
-                      {recording.transcript && (
-                        <div className="mt-3 p-3 bg-gray-100 rounded-md">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-xs text-gray-600 font-medium">Full Transcript</span>
-                          </div>
-                          <p className="text-sm text-gray-700 line-clamp-3">
-                            {recording.transcript.length > 200 
-                              ? `${recording.transcript.substring(0, 200)}...` 
-                              : recording.transcript
-                            }
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <Mic className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No recordings yet</h3>
-                  <p className="text-gray-500 mb-4">
-                    Audio recordings and their transcripts will appear here.
-                  </p>
-                  <Link
-                    to={`/record?patientId=${patientId}`}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                  >
-                    <Mic className="h-4 w-4" />
-                    Record Consultation
-                  </Link>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+          {/* Recordings Tab */}
+          <TabsContent value="recordings">
+            <ConsultationRecordsSection
+              recordings={recordings}
+              recordingHandlers={{
+                onNavigateToRecord: () => navigate(`/record?patientId=${patientId}`),
+                onNavigateToDetail: (recordingId) => navigate(`/recordings/${recordingId}`)
+              }}
+              isLoading={recordingsLoading}
+            />
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   )
-} 
+}

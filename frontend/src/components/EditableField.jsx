@@ -13,7 +13,7 @@ export function EditableField({
   value, 
   onSave, 
   type = 'text', 
-  placeholder = 'Enter value...', 
+  placeholder = 'Enter value',
   className = '',
   displayClassName = '',
   options = [], // For select type
@@ -55,7 +55,7 @@ export function EditableField({
 
   const cancelEditing = () => {
     setIsEditing(false)
-    setEditValue('')
+    setEditValue(value || '')
     setError('')
   }
 
@@ -90,7 +90,9 @@ export function EditableField({
       }
       
       setIsEditing(false)
+      toast.success(`Updated ${field} successfully`)
     } catch (error) {
+      console.error('EditableField save error:', error)
       setError(error.message)
       toast.error(`Failed to save: ${error.message}`)
     } finally {
@@ -108,16 +110,25 @@ export function EditableField({
     }
   }
 
-  // Cancel on blur instead of saving
   const handleBlur = () => {
-    cancelEditing()
+    setTimeout(() => {
+      if (isEditing) {
+        saveValue()
+      }
+    }, 150)
   }
 
   const getDisplayValue = () => {
     if (formatDisplay && value) {
       return formatDisplay(value)
     }
-    return value || 'N/A'
+    
+    if (type === 'select' && value && options.length > 0) {
+      const option = options.find(opt => opt.value === value)
+      return option ? option.label : placeholder
+    }
+    
+    return value || placeholder
   }
 
   const renderInput = () => {
@@ -128,15 +139,24 @@ export function EditableField({
       onKeyDown: handleKeyDown,
       onBlur: handleBlur,
       placeholder,
-      className: cn('h-8', className),
+      className: cn(
+        'w-full bg-transparent text-xs',
+        'focus:outline-none focus:ring-0',
+        type === 'textarea' ? 'resize-none' : 'h-[inherit]',
+        className
+      ),
       disabled: updatePatientMutation.isPending
     }
 
     switch (type) {
       case 'select':
         return (
-          <Select {...baseProps} className={cn('h-8', className)}>
-            <option value="">Select...</option>
+          <Select 
+            {...baseProps}
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+          >
+            <option value="">{placeholder}</option>
             {options.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -144,118 +164,46 @@ export function EditableField({
             ))}
           </Select>
         )
-      case 'date':
-        return <Input {...baseProps} type="date" />
-      case 'email':
-        return <Input {...baseProps} type="email" />
-      case 'tel':
-        return <Input {...baseProps} type="tel" />
-      case 'number':
-        return <Input {...baseProps} type="number" />
       case 'textarea':
         return (
           <textarea
             {...baseProps}
-            className={cn('min-h-[80px] px-3 py-2 rounded-md bg-background resize-none text-sm focus:outline-none', className)}
             rows={3}
           />
         )
       default:
-        return <Input {...baseProps} />
+        return <Input {...baseProps} type={type} />
     }
   }
 
-  if (isEditing) {
-    return (
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          {renderInput()}
-          <Button
-            size="sm"
-            onClick={saveValue}
-            disabled={updatePatientMutation.isPending}
-            className="h-8 w-8 p-0 shrink-0"
-          >
-            {isLoading ? (
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-            ) : (
-              <Check className="h-4 w-4" />
-            )}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={cancelEditing}
-            disabled={updatePatientMutation.isPending}
-            className="h-8 w-8 p-0 shrink-0"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-        {error && (
-          <p className="text-sm text-destructive">{error}</p>
-        )}
-        {/* Show BMI preview when editing weight/height */}
-        {showBMI && relatedData && editValue && (
-          <div className="mt-2">
-            {(field === 'weight' && relatedData.height) && (
-              <BMIBadge weight={parseFloat(editValue)} height={relatedData.height} className="ml-0" />
-            )}
-            {(field === 'height' && relatedData.weight) && (
-              <BMIBadge weight={relatedData.weight} height={parseFloat(editValue)} className="ml-0" />
-            )}
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  const displayValue = getDisplayValue()
-  const isEmpty = !value || value === 'N/A'
-
   return (
-    <div>
-      <div
-        onClick={startEditing}
-        className={cn(
-          'group relative cursor-pointer rounded-md px-3 py-2 -mx-3 -my-2',
-          'hover:bg-muted/30',
-          'transition-colors duration-200',
-          displayClassName
-        )}
-        title="Click to edit"
-      >
-        <div className="flex items-center gap-2">
-          {icon && <span className="text-muted-foreground">{icon}</span>}
+    <div 
+      className={cn(
+        'group relative min-h-[24px] flex items-center',
+        'hover:bg-muted/5 rounded px-2 -mx-2',
+        'transition-colors duration-100',
+        displayClassName
+      )}
+      onClick={startEditing}
+    >
+      {isEditing ? (
+        renderInput()
+      ) : (
+        <div className="w-full cursor-text">
           {badge ? (
-            <Badge 
-              variant={isEmpty ? "outline" : "secondary"} 
-              className="capitalize font-normal"
-            >
-              {displayValue}
+            <Badge variant="outline" className="font-normal text-xs">
+              {getDisplayValue()}
             </Badge>
           ) : (
-            <span className={cn(
-              'font-medium',
-              isEmpty && 'text-muted-foreground italic'
-            )}>
-              {displayValue}
+            <span className="text-xs text-gray-600">
+              {icon && <span className="mr-2">{icon}</span>}
+              {getDisplayValue()}
             </span>
           )}
-          <Edit3 className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity ml-auto" />
         </div>
-      </div>
-      
-      {/* Show BMI calculation for weight/height fields */}
-      {showBMI && relatedData && value && (
-        <div className="mt-1 ml-0">
-          {(field === 'weight' && relatedData.height) && (
-            <BMIBadge weight={parseFloat(value)} height={relatedData.height} />
-          )}
-          {(field === 'height' && relatedData.weight) && (
-            <BMIBadge weight={relatedData.weight} height={parseFloat(value)} />
-          )}
-        </div>
+      )}
+      {error && (
+        <div className="text-xs text-destructive mt-1">{error}</div>
       )}
     </div>
   )

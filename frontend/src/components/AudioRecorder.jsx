@@ -32,8 +32,6 @@ export function AudioRecorder({
   const streamRef = useRef(null)
   const durationIntervalRef = useRef(null)
   const audioElementRef = useRef(null)
-  const chunksToUploadRef = useRef([])
-  const chunkCounterRef = useRef(0)
   
   // Configuration
   const CHUNK_DURATION = 30000 // 30 seconds in milliseconds
@@ -110,8 +108,6 @@ export function AudioRecorder({
       
       streamRef.current = stream
       audioChunksRef.current = []
-      chunksToUploadRef.current = []
-      chunkCounterRef.current = 0
       
       // Create MediaRecorder with appropriate options
       const options = {
@@ -137,25 +133,6 @@ export function AudioRecorder({
       mediaRecorderRef.current.ondataavailable = (event) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data)
-          
-          // Create a chunk for upload if we have enough data
-          if (audioChunksRef.current.length > 0) {
-            const chunkBlob = new Blob(audioChunksRef.current, { 
-              type: mediaRecorderRef.current.mimeType 
-            })
-            
-            if (chunkBlob.size > 10000) { // At least 10KB
-              chunkCounterRef.current += 1
-              chunksToUploadRef.current.push({
-                id: chunkCounterRef.current,
-                blob: chunkBlob,
-                uploaded: false
-              })
-              
-              // Upload chunk in background
-              uploadChunk(chunkBlob, chunkCounterRef.current)
-            }
-          }
         }
       }
       
@@ -242,38 +219,7 @@ export function AudioRecorder({
     }
   }
   
-  const uploadChunk = async (chunkBlob, chunkId) => {
-    try {
-      const formData = new FormData()
-      const filename = `chunk_${chunkId}_${Date.now()}.webm`
-      formData.append('file', chunkBlob, filename)
-      formData.append('patient_id', selectedPatient.id)
-      formData.append('chunk_id', chunkId.toString())
-      formData.append('is_chunk', 'true')
-      
-      const response = await fetch('http://localhost:8000/upload', {
-        method: 'POST',
-        body: formData,
-      })
-      
-      if (!response.ok) {
-        throw new Error(`Chunk upload failed: ${response.statusText}`)
-      }
-      
-      const result = await response.json()
-      console.log(`Chunk ${chunkId} uploaded successfully:`, result)
-      
-      // Mark chunk as uploaded
-      const chunk = chunksToUploadRef.current.find(c => c.id === chunkId)
-      if (chunk) {
-        chunk.uploaded = true
-      }
-      
-    } catch (error) {
-      console.error(`Failed to upload chunk ${chunkId}:`, error)
-      // We'll retry with the final upload
-    }
-  }
+
   
   const uploadFinalRecording = async (finalBlob) => {
     setIsUploading(true)
@@ -332,8 +278,6 @@ export function AudioRecorder({
     setIsPlaying(false)
     setUploadProgress(0)
     audioChunksRef.current = []
-    chunksToUploadRef.current = []
-    chunkCounterRef.current = 0
   }
   
   if (!hasPermission) {

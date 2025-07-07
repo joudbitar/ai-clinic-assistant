@@ -240,16 +240,56 @@ class Patient(BaseModel):
     id: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    father_name: Optional[str] = None
+    mother_name: Optional[str] = None
+    gender: Optional[str] = None
     date_of_birth: Optional[str] = None
+    marital_status: Optional[str] = None
+    children_count: Optional[int] = None
     phone_1: Optional[str] = None
+    phone_2: Optional[str] = None
     phone: Optional[str] = None  # Legacy compatibility
+    email: Optional[str] = None
+    address: Optional[str] = None
+    occupation: Optional[str] = None
+    education: Optional[str] = None
+    smoking: Optional[bool] = None
+    country_of_birth: Optional[str] = None
+    city_of_birth: Optional[str] = None
+    file_reference: Optional[str] = None
+    case_number: Optional[str] = None
+    referring_physician_name: Optional[str] = None
+    referring_physician_phone_1: Optional[str] = None
+    referring_physician_email: Optional[str] = None
+    third_party_payer: Optional[str] = None
+    medical_ref_number: Optional[str] = None
     created_at: Optional[datetime] = None
 
 class PatientCreate(BaseModel):
     first_name: str
     last_name: str
+    father_name: Optional[str] = None
+    mother_name: Optional[str] = None
+    gender: Optional[str] = None
     date_of_birth: str
+    marital_status: Optional[str] = None
+    children_count: Optional[int] = None
     phone_1: str
+    phone_2: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
+    occupation: Optional[str] = None
+    education: Optional[str] = None
+    smoking: Optional[bool] = None
+    country_of_birth: Optional[str] = None
+    city_of_birth: Optional[str] = None
+    file_reference: Optional[str] = None
+    case_number: Optional[str] = None
+    referring_physician_name: Optional[str] = None
+    referring_physician_phone_1: Optional[str] = None
+    referring_physician_email: Optional[str] = None
+    third_party_payer: Optional[str] = None
+    medical_ref_number: Optional[str] = None
 
 class PatientSearch(BaseModel):
     first_name: Optional[str] = None
@@ -280,10 +320,14 @@ async def generate_consultation_summary(transcript: str) -> str:
             return "Transcript too short for summary generation."
         
         # Medical prompt for GPT-4
-        medical_prompt = """You are a medical assistant.
-Summarize the following consultation into clear bullet points.
-Focus on symptoms, treatment discussions, side effects, and any next steps.
-Output ONLY bullet points."""
+        medical_prompt = """You are a medical assistant helping an oncologist. 
+Given the following transcript, create bullet points focusing on:
+- history of present illness
+- significant past events
+- planned investigations or treatments
+- comorbidities and relevant medical history.
+
+Only include direct facts, no generic comments. Be precise and use a clinical tone."""
         
         # Create the chat completion request
         response = openai.chat.completions.create(
@@ -366,6 +410,48 @@ async def create_patient(patient_data: PatientCreate) -> Patient:
             "phone_1": patient_data.phone_1.strip(),
             "created_at": current_time.isoformat()
         }
+        
+        # Add optional fields if provided
+        if patient_data.father_name:
+            patient_record["father_name"] = patient_data.father_name.strip()
+        if patient_data.mother_name:
+            patient_record["mother_name"] = patient_data.mother_name.strip()
+        if patient_data.gender:
+            patient_record["gender"] = patient_data.gender
+        if patient_data.marital_status:
+            patient_record["marital_status"] = patient_data.marital_status
+        if patient_data.children_count is not None:
+            patient_record["children_count"] = patient_data.children_count
+        if patient_data.phone_2:
+            patient_record["phone_2"] = patient_data.phone_2.strip()
+        if patient_data.email:
+            patient_record["email"] = patient_data.email.strip()
+        if patient_data.address:
+            patient_record["address"] = patient_data.address.strip()
+        if patient_data.occupation:
+            patient_record["occupation"] = patient_data.occupation.strip()
+        if patient_data.education:
+            patient_record["education"] = patient_data.education.strip()
+        if patient_data.smoking is not None:
+            patient_record["smoking"] = patient_data.smoking
+        if patient_data.country_of_birth:
+            patient_record["country_of_birth"] = patient_data.country_of_birth.strip()
+        if patient_data.city_of_birth:
+            patient_record["city_of_birth"] = patient_data.city_of_birth.strip()
+        if patient_data.file_reference:
+            patient_record["file_reference"] = patient_data.file_reference.strip()
+        if patient_data.case_number:
+            patient_record["case_number"] = patient_data.case_number.strip()
+        if patient_data.referring_physician_name:
+            patient_record["referring_physician_name"] = patient_data.referring_physician_name.strip()
+        if patient_data.referring_physician_phone_1:
+            patient_record["referring_physician_phone_1"] = patient_data.referring_physician_phone_1.strip()
+        if patient_data.referring_physician_email:
+            patient_record["referring_physician_email"] = patient_data.referring_physician_email.strip()
+        if patient_data.third_party_payer:
+            patient_record["third_party_payer"] = patient_data.third_party_payer.strip()
+        if patient_data.medical_ref_number:
+            patient_record["medical_ref_number"] = patient_data.medical_ref_number.strip()
         
         response = supabase.table("patients").insert(patient_record).execute()
         logger.info(f"Created patient with ID: {patient_id}")
@@ -634,6 +720,48 @@ async def update_patient(patient_id: str, patient_data: PatientCreate) -> Patien
             "date_of_birth": patient_data.date_of_birth.strip(),
             "phone_1": patient_data.phone_1.strip()
         }
+        
+        # Add optional fields if provided
+        if patient_data.father_name:
+            updated_data["father_name"] = patient_data.father_name.strip()
+        if patient_data.mother_name:
+            updated_data["mother_name"] = patient_data.mother_name.strip()
+        if patient_data.gender:
+            updated_data["gender"] = patient_data.gender
+        if patient_data.marital_status:
+            updated_data["marital_status"] = patient_data.marital_status
+        if patient_data.children_count is not None:
+            updated_data["children_count"] = patient_data.children_count
+        if patient_data.phone_2:
+            updated_data["phone_2"] = patient_data.phone_2.strip()
+        if patient_data.email:
+            updated_data["email"] = patient_data.email.strip()
+        if patient_data.address:
+            updated_data["address"] = patient_data.address.strip()
+        if patient_data.occupation:
+            updated_data["occupation"] = patient_data.occupation.strip()
+        if patient_data.education:
+            updated_data["education"] = patient_data.education.strip()
+        if patient_data.smoking is not None:
+            updated_data["smoking"] = patient_data.smoking
+        if patient_data.country_of_birth:
+            updated_data["country_of_birth"] = patient_data.country_of_birth.strip()
+        if patient_data.city_of_birth:
+            updated_data["city_of_birth"] = patient_data.city_of_birth.strip()
+        if patient_data.file_reference:
+            updated_data["file_reference"] = patient_data.file_reference.strip()
+        if patient_data.case_number:
+            updated_data["case_number"] = patient_data.case_number.strip()
+        if patient_data.referring_physician_name:
+            updated_data["referring_physician_name"] = patient_data.referring_physician_name.strip()
+        if patient_data.referring_physician_phone_1:
+            updated_data["referring_physician_phone_1"] = patient_data.referring_physician_phone_1.strip()
+        if patient_data.referring_physician_email:
+            updated_data["referring_physician_email"] = patient_data.referring_physician_email.strip()
+        if patient_data.third_party_payer:
+            updated_data["third_party_payer"] = patient_data.third_party_payer.strip()
+        if patient_data.medical_ref_number:
+            updated_data["medical_ref_number"] = patient_data.medical_ref_number.strip()
         
         response = supabase.table("patients").update(updated_data).eq("id", patient_id).execute()
         

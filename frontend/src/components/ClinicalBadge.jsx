@@ -11,7 +11,8 @@ export function ClinicalBadge({
   color = 'bg-gray-100 text-gray-800',
   size = 'sm',
   className = '',
-  icon = null 
+  icon = null,
+  urgent = false // For urgent/critical values
 }) {
   if (!value && value !== 0) return null
   
@@ -21,19 +22,92 @@ export function ClinicalBadge({
       <Badge 
         variant="secondary" 
         className={cn(
-          'font-medium',
+          'font-medium border-0',
+          urgent && 'animate-pulse ring-2 ring-red-500',
           color,
           size === 'xs' && 'text-xs px-1 py-0',
           size === 'sm' && 'text-xs px-2 py-1',
           size === 'md' && 'text-sm px-3 py-1'
         )}
       >
+        {urgent && '⚠️ '}
         {label}: {value}
         {category && (
           <span className="ml-1 opacity-80">({category})</span>
         )}
       </Badge>
     </div>
+  )
+}
+
+/**
+ * ECOG Performance Status Badge
+ */
+export function ECOGBadge({ score, size = "default" }) {
+  if (score === null || score === undefined) return null
+  
+  let color, tooltip
+  if (score === 0) {
+    color = 'bg-green-100 text-green-800'
+    tooltip = 'Fully active, no restrictions'
+  } else if (score === 1) {
+    color = 'bg-blue-100 text-blue-800'
+    tooltip = 'Restricted in strenuous activity'
+  } else if (score === 2) {
+    color = 'bg-yellow-100 text-yellow-800'
+    tooltip = 'Ambulatory, capable of self-care'
+  } else if (score === 3) {
+    color = 'bg-orange-100 text-orange-800'
+    tooltip = 'Capable of only limited self-care'
+  } else {
+    color = 'bg-red-100 text-red-800'
+    tooltip = 'Completely disabled'
+  }
+  
+  const sizeClasses = {
+    sm: "text-xs px-2 py-1",
+    default: "text-sm px-2.5 py-1"
+  }
+  
+  return (
+    <Badge 
+      className={`${color} ${sizeClasses[size]} font-medium border-0 cursor-help`}
+      title={`ECOG Performance Status: ${tooltip}`}
+    >
+      ECOG {score}
+    </Badge>
+  )
+}
+
+/**
+ * Comorbidity Badge for important medical conditions
+ */
+export function ComorbidityBadge({ condition, severity = "moderate", size = "default" }) {
+  if (!condition) return null
+  
+  let color
+  switch (severity) {
+    case 'mild':
+      color = 'bg-blue-100 text-blue-800'
+      break
+    case 'severe':
+      color = 'bg-red-100 text-red-800'
+      break
+    default:
+      color = 'bg-yellow-100 text-yellow-800'
+  }
+  
+  const sizeClasses = {
+    sm: "text-xs px-2 py-1",
+    default: "text-sm px-2.5 py-1"
+  }
+  
+  return (
+    <Badge 
+      className={`${color} ${sizeClasses[size]} font-medium border-0`}
+    >
+      {condition}
+    </Badge>
   )
 }
 
