@@ -142,13 +142,13 @@ export function PatientCard({ patient, matches = [], query }) {
       transition={{ type: "spring", stiffness: 80, damping: 15 }}
     >
       <Card
-        className="p-4 bg-parchment/50 border-almond hover:bg-almond/60 hover:border-sage/30 hover:ring-2 hover:ring-sage/40 transition-all duration-300 cursor-pointer group shadow-md shadow-black/5"
+        className="p-4 bg-parchment/50 border-almond hover:bg-almond/30 hover:border-sage/20 transition-all duration-200 cursor-pointer group shadow-sm"
         onClick={() => navigate(`/patients/${patient.id}`)}
       >
         <div className="flex items-start justify-between">
-          <div className="flex items-start gap-4 flex-1">
+          <div className="flex items-start gap-4 flex-1 min-h-[80px]">
             {/* Avatar */}
-            <div className="relative">
+            <div className="relative shrink-0">
               <Avatar className="h-12 w-12 border-2 border-sage/20">
                 <AvatarImage src={patient.avatar_url} />
                 <AvatarFallback className="bg-sage/20 text-sage font-semibold">
@@ -166,12 +166,12 @@ export function PatientCard({ patient, matches = [], query }) {
             {/* Patient Info */}
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between mb-2">
-                <div>
-                  <h3 className="text-lg font-semibold text-cacao group-hover:text-sage transition-colors duration-300">
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-semibold text-cacao truncate">
                     {createHighlightedName()}
                   </h3>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-sm text-cacao/90">
+                    <span className="text-sm text-cacao/90 truncate">
                       {createHighlightedText(patient.cancer_type || 'Cancer type not specified', query)}
                     </span>
                     {patient.cancer_stage && (
@@ -186,15 +186,15 @@ export function PatientCard({ patient, matches = [], query }) {
                 </div>
 
                 {/* Status Badge - Soft pill style */}
-                <Badge className={`${getStatusVariant(patient.clinical_status)} font-medium px-3 py-1 rounded-full`}>
+                <Badge className={`${getStatusVariant(patient.clinical_status)} font-medium px-3 py-1 rounded-full shrink-0 ml-2`}>
                   {patient.clinical_status || 'Unknown'}
                 </Badge>
               </div>
 
               {/* Next Step */}
               <div className="flex items-center gap-2 text-sm text-cacao/60">
-                <Clock className="h-4 w-4" />
-                <span>{formatNextStep(patient)}</span>
+                <Clock className="h-4 w-4 shrink-0" />
+                <span className="truncate">{formatNextStep(patient)}</span>
               </div>
             </div>
           </div>

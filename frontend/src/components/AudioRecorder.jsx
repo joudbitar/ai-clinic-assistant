@@ -25,7 +25,7 @@ export function AudioRecorder({
   const [audioBlob, setAudioBlob] = useState(null)
   const [audioUrl, setAudioUrl] = useState(null)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [hasPermission, setHasPermission] = useState(false)
+  const [hasPermission, setHasPermission] = useState(null) // null = checking, true = granted, false = denied
   const [permissionError, setPermissionError] = useState('')
   
   // Refs
@@ -298,7 +298,18 @@ export function AudioRecorder({
     audioChunksRef.current = []
   }
   
-  if (!hasPermission) {
+  // Show loading state while checking permissions
+  if (hasPermission === null) {
+    return (
+      <div className="flex flex-col items-center space-y-4 py-8">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <p className="text-sm text-muted-foreground">Checking microphone permissions...</p>
+      </div>
+    )
+  }
+
+  // Show error state if permission denied
+  if (hasPermission === false) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
@@ -327,7 +338,7 @@ export function AudioRecorder({
               size="lg"
               onClick={startRecording}
               disabled={isRecordingDisabled}
-              className="h-16 w-16 rounded-full"
+              className="h-16 w-16 rounded-full bg-red-500 hover:bg-red-600 text-white border-2 border-red-300"
             >
               <Mic className="h-8 w-8" />
             </Button>
@@ -339,7 +350,7 @@ export function AudioRecorder({
                 size="lg"
                 variant="destructive"
                 onClick={stopRecording}
-                className="h-16 w-16 rounded-full"
+                className="h-16 w-16 rounded-full bg-red-600 hover:bg-red-700 text-white"
               >
                 <Square className="h-8 w-8" />
               </Button>
@@ -348,7 +359,7 @@ export function AudioRecorder({
                 size="lg"
                 variant="outline"
                 onClick={isPaused ? resumeRecording : pauseRecording}
-                className="h-12 w-12 rounded-full"
+                className="h-12 w-12 rounded-full border-2 border-blue-300 hover:bg-blue-50"
               >
                 {isPaused ? <Play className="h-6 w-6" /> : <Pause className="h-6 w-6" />}
               </Button>
@@ -361,7 +372,7 @@ export function AudioRecorder({
                 size="lg"
                 variant="outline"
                 onClick={isPlaying ? pauseAudio : playAudio}
-                className="h-12 w-12 rounded-full"
+                className="h-12 w-12 rounded-full border-2 border-green-300 hover:bg-green-50"
               >
                 {isPlaying ? <VolumeX className="h-6 w-6" /> : <Volume2 className="h-6 w-6" />}
               </Button>
@@ -370,7 +381,7 @@ export function AudioRecorder({
                 size="lg"
                 variant="ghost"
                 onClick={resetRecording}
-                className="h-12 w-12 rounded-full"
+                className="h-12 w-12 rounded-full border-2 border-gray-300 hover:bg-gray-50"
               >
                 <Square className="h-6 w-6" />
               </Button>

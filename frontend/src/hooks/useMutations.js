@@ -84,6 +84,62 @@ export function useUpdatePatient() {
   });
 }
 
+export function useDeletePatient() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (patientId) => {
+      const response = await fetch(`${API_BASE_URL}/patients/${patientId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || "Failed to delete patient");
+      }
+
+      return response.json();
+    },
+    onSuccess: (data, patientId) => {
+      // Remove the patient from the patients list cache
+      queryClient.setQueryData(["patients"], (old) => {
+        return old ? old.filter((p) => p.id !== patientId) : old;
+      });
+
+      // Remove the individual patient cache
+      queryClient.removeQueries(["patient", patientId]);
+
+      // Remove all related queries for this patient
+      const relatedQueryKeys = [
+        ["patient-recordings", patientId],
+        ["patient-histories", patientId],
+        ["patient-previous-chemotherapy", patientId],
+        ["patient-previous-radiotherapy", patientId],
+        ["patient-previous-surgeries", patientId],
+        ["patient-previous-other-treatments", patientId],
+        ["patient-concomitant-medications", patientId],
+        ["patient-baselines", patientId],
+        ["patient-followups", patientId],
+        ["patient-lab-results", patientId],
+        ["patient-molecular-tests", patientId],
+        ["patient-imaging-studies", patientId],
+        ["audit-logs", patientId],
+        ["patient-complete-data", patientId],
+      ];
+
+      relatedQueryKeys.forEach((queryKey) => {
+        queryClient.removeQueries(queryKey);
+      });
+
+      toast.success("Patient and all related records deleted successfully");
+    },
+    onError: (error) => {
+      toast.error(`Failed to delete patient: ${error.message}`);
+    },
+  });
+}
+
 // Patient History mutations
 export function useUpdatePatientHistory() {
   const queryClient = useQueryClient();
