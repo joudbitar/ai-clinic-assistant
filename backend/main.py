@@ -333,10 +333,10 @@ async def generate_consultation_summary(transcript: str) -> str:
             logger.info("Transcript too short for meaningful summary")
             return "Transcript too short for summary generation."
         
-        # Medical prompt for GPT-4 - multilingual support
-        medical_prompt = """You are a medical assistant helping an oncologist. You can understand and respond in multiple languages.
+        # Medical prompt for GPT-4 - always respond in English
+        medical_prompt = """You are a medical assistant helping an oncologist. You can understand multiple languages but must always respond in English.
 
-IMPORTANT: Always respond in the same language as the input transcript. If the transcript is in Arabic, respond in Arabic. If it's in French, respond in French, etc.
+IMPORTANT: Always respond in ENGLISH regardless of the input language. Even if the transcript is in Arabic, French, Spanish, or any other language, your summary must be in English.
 
 Given the following transcript, create bullet points focusing on:
 - history of present illness  
@@ -344,7 +344,7 @@ Given the following transcript, create bullet points focusing on:
 - planned investigations or treatments
 - comorbidities and relevant medical history
 
-Only include direct facts, no generic comments. Be precise and use a clinical tone. Remember to respond in the same language as the transcript."""
+Only include direct facts, no generic comments. Be precise and use a clinical tone. Always write your summary in English."""
         
         # Create the chat completion request
         response = openai.chat.completions.create(
@@ -854,6 +854,9 @@ async def upload_file(
         # Parse clinical and demographic data from summary
         clinical_data = await parse_clinical_data_from_summary(summary)
         
+        # Extract comprehensive demographic data from transcript (for existing patients too)
+        demographics = await extract_patient_demographics_from_transcript(transcript)
+        
         # NOTE: File storage disabled by user request - only storing transcript and metadata
         public_url = None
         
@@ -891,40 +894,65 @@ async def upload_file(
             if current_patient.data:
                 patient_data = current_patient.data[0]
                 
-                # Add demographic data only if not already present in patient record
-                if not patient_data.get('occupation') and clinical_data.get('occupation'):
-                    patient_update["occupation"] = clinical_data.get('occupation')
+                # Enhanced demographic data extraction from transcript (comprehensive approach)
+                # Update demographic fields if they're missing or incomplete
+                demographic_fields = [
+                    'father_name', 'mother_name', 'occupation', 'education', 
+                    'marital_status', 'country_of_birth', 'city_of_birth',
+                    'file_reference', 'case_number', 'referring_physician_name',
+                    'referring_physician_phone_1', 'referring_physician_email',
+                    'third_party_payer', 'medical_ref_number'
+                ]
                 
-                if not patient_data.get('education') and clinical_data.get('education'):
-                    patient_update["education"] = clinical_data.get('education')
+                for field in demographic_fields:
+                    if not patient_data.get(field) and demographics.get(field):
+                        patient_update[field] = demographics.get(field).strip()
                 
-                if not patient_data.get('marital_status') and clinical_data.get('marital_status'):
-                    patient_update["marital_status"] = clinical_data.get('marital_status')
+                # Handle special cases for certain fields
+                if not patient_data.get('children_count') and demographics.get('children_count'):
+                    try:
+                        patient_update["children_count"] = int(demographics.get('children_count'))
+                    except (ValueError, TypeError):
+                        pass
                 
-                if not patient_data.get('children_count') and clinical_data.get('children_count'):
-                    if isinstance(clinical_data.get('children_count'), (int, float)):
-                        patient_update["children_count"] = int(clinical_data.get('children_count'))
+                if patient_data.get('smoking') is None and demographics.get('smoking') is not None:
+                    patient_update["smoking"] = demographics.get('smoking')
                 
-                if patient_data.get('smoking') is None and clinical_data.get('smoking') is not None:
-                    patient_update["smoking"] = clinical_data.get('smoking')
+                # Update phone numbers if missing
+                if not patient_data.get('phone_2') and demographics.get('phone_2'):
+                    patient_update["phone_2"] = demographics.get('phone_2').strip()
                 
-                if not patient_data.get('country_of_birth') and clinical_data.get('country_of_birth'):
-                    patient_update["country_of_birth"] = clinical_data.get('country_of_birth')
-                
-                if not patient_data.get('city_of_birth') and clinical_data.get('city_of_birth'):
-                    patient_update["city_of_birth"] = clinical_data.get('city_of_birth')
+                # Update email if missing
+                if not patient_data.get('email') and demographics.get('email'):
+                    patient_update["email"] = demographics.get('email').strip()
                 
                 # Enhance address if current one is empty or very basic
-                if clinical_data.get('address') and (
+                if demographics.get('address') and (
                     not patient_data.get('address') or 
                     len(patient_data.get('address', '')) < 20
                 ):
-                    patient_update["address"] = clinical_data.get('address')
+                    patient_update["address"] = demographics.get('address').strip()
+                
+                # Also update from clinical data as fallback
+                clinical_demographic_fields = ['occupation', 'education', 'marital_status']
+                for field in clinical_demographic_fields:
+                    if not patient_data.get(field) and not patient_update.get(field) and clinical_data.get(field):
+                        patient_update[field] = clinical_data.get(field)
+                
+                if not patient_data.get('children_count') and not patient_update.get('children_count') and clinical_data.get('children_count'):
+                    try:
+                        patient_update["children_count"] = int(clinical_data.get('children_count'))
+                    except (ValueError, TypeError):
+                        pass
+                
+                if patient_data.get('smoking') is None and not patient_update.get('smoking') and clinical_data.get('smoking') is not None:
+                    patient_update["smoking"] = clinical_data.get('smoking')
             
             # Apply updates if any
             if patient_update:
                 update_response = supabase.table("patients").update(patient_update).eq("id", patient_id).execute()
                 logger.info(f"Enhanced patient record with extracted data: {list(patient_update.keys())}")
+                logger.info(f"Updated demographic fields: {[k for k in patient_update.keys() if k not in ['diagnosis', 'allergies', 'medications']]}")
         
         return UploadResponse(
             id=recording_id,
@@ -932,7 +960,8 @@ async def upload_file(
             transcript=transcript,
             summary=summary,
             patient_id=patient_id,
-            created_at=current_time
+            created_at=current_time,
+            extraction_metadata=extraction_metadata
         )
         
     except HTTPException:
@@ -2264,6 +2293,79 @@ async def create_comprehensive_consultation(
         raise HTTPException(
             status_code=500, 
             detail=f"Failed to create comprehensive consultation: {str(e)}"
+        )
+
+@app.delete("/patients/{patient_id}")
+async def delete_patient(patient_id: str):
+    """Delete a patient and all related records."""
+    try:
+        logger.info(f"Deleting patient: {patient_id}")
+        
+        # Check if patient exists
+        existing = supabase.table("patients").select("id").eq("id", patient_id).execute()
+        if not existing.data:
+            raise HTTPException(status_code=404, detail="Patient not found")
+        
+        # Get all baselines for this patient to delete their tumors first
+        baselines = supabase.table("patient_baselines").select("id").eq("patient_id", patient_id).execute()
+        baseline_ids = [baseline["id"] for baseline in baselines.data] if baselines.data else []
+        
+        # Delete baseline tumors first (foreign key dependency)
+        if baseline_ids:
+            for baseline_id in baseline_ids:
+                supabase.table("baseline_tumors").delete().eq("baseline_id", baseline_id).execute()
+                logger.info(f"Deleted tumors for baseline: {baseline_id}")
+        
+        # Delete all related records in order (to avoid foreign key constraints)
+        tables_to_clean = [
+            "patient_symptom_assessments",
+            "patient_biomarkers", 
+            "patient_treatment_responses",
+            "patient_risk_assessments",
+            "patient_psychosocial_assessments",
+            "patient_clinical_trials",
+            "recordings",
+            "patient_histories",
+            "patient_previous_chemotherapy",
+            "patient_previous_radiotherapy",
+            "patient_previous_surgeries",
+            "patient_previous_other_treatments",
+            "patient_concomitant_medications",
+            "patient_baselines"
+        ]
+        
+        deleted_counts = {}
+        for table in tables_to_clean:
+            try:
+                result = supabase.table(table).delete().eq("patient_id", patient_id).execute()
+                # Supabase doesn't return count directly, but we can log the operation
+                deleted_counts[table] = len(result.data) if result.data else 0
+                logger.info(f"Deleted records from {table}")
+            except Exception as e:
+                logger.warning(f"Failed to delete from {table}: {str(e)}")
+                # Continue with other tables even if one fails
+        
+        # Finally delete the patient record
+        response = supabase.table("patients").delete().eq("id", patient_id).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Patient not found during deletion")
+        
+        logger.info(f"Successfully deleted patient {patient_id} and all related records")
+        
+        return {
+            "message": "Patient and all related records deleted successfully",
+            "patient_id": patient_id,
+            "deleted_from_tables": list(deleted_counts.keys()) + ["patients"]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete patient: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to delete patient: {str(e)}"
         )
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ import PatientDetailPage from './pages/PatientDetailPage'
 import RecordingDetailPage from './pages/RecordingDetailPage'
 import BaselineDetailPage from './pages/BaselineDetailPage'
 import RecordConsultationPage from './pages/RecordConsultationPage'
+import PatientRecordingPage from './pages/PatientRecordingPage'
 import NewPatientPage from './pages/NewPatientPage'
 import SettingsPage from './pages/SettingsPage'
 import Dashboard from './pages/Dashboard'
@@ -31,8 +32,9 @@ export default function App() {
             <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/patients/new" element={<NewPatientPage />} />
-              <Route path="/add" element={<NewPatientPage />} />
+              <Route path="/add" element={<RecordConsultationPage />} />
               <Route path="/patients/:patientId" element={<PatientDetailPage />} />
+              <Route path="/patients/:patientId/record" element={<PatientRecordingPage />} />
               <Route path="/dashboard/:patientId" element={<Dashboard />} />
               <Route path="/dashboard/:patientId/:tab" element={<Dashboard />} />
               <Route path="/baselines/:baselineId" element={<BaselineDetailPage />} />

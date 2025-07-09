@@ -24,11 +24,12 @@ export default function RecordConsultationPage() {
   const [searchParams] = useSearchParams()
   const { toast } = useToast()
   
-  // Get patient ID from URL params if coming from patient detail page
+  // Get parameters from URL
   const preselectedPatientId = searchParams.get('patientId')
+  const typeParam = searchParams.get('type')
   
   // State management
-  const [consultationType, setConsultationType] = useState('existing') // 'new' or 'existing'
+  const [consultationType, setConsultationType] = useState(typeParam || 'existing') // 'new' or 'existing'
   const [activeTab, setActiveTab] = useState('record')
   const [selectedPatient, setSelectedPatient] = useState(null)
   const [isRecording, setIsRecording] = useState(false)
@@ -51,6 +52,9 @@ export default function RecordConsultationPage() {
   // Note: preselectedPatientId is available from URL params but we don't auto-select
   // Users must manually select a patient for clarity and confirmation
   
+  // Get patients data for auto-selection
+  const { data: patients = [] } = usePatients()
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -62,6 +66,17 @@ export default function RecordConsultationPage() {
       }
     }
   }, [])
+
+  // Auto-select patient if patientId is provided in URL
+  useEffect(() => {
+    if (preselectedPatientId && patients.length > 0 && !selectedPatient) {
+      const patient = patients.find(p => p.id === preselectedPatientId)
+      if (patient) {
+        setSelectedPatient(patient)
+        setConsultationType('existing')
+      }
+    }
+  }, [preselectedPatientId, patients, selectedPatient])
   
   const formatDuration = (seconds) => {
     const hours = Math.floor(seconds / 3600)
